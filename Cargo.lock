@@ -594,7 +594,6 @@ dependencies = [
 name = "hazler-http"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "reqwest",
  "thiserror",
  "tokio",
@@ -606,7 +605,6 @@ dependencies = [
 name = "hazler-parser"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "scraper",
  "thiserror",
  "tokio",

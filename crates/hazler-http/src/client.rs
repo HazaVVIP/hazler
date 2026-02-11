@@ -24,7 +24,7 @@ impl HttpClient {
     }
 
     /// Create a default HTTP client
-    pub fn default() -> Result<Self> {
+    pub fn new_default() -> Result<Self> {
         Self::new("Hazler/0.1.0", Duration::from_secs(10))
     }
 

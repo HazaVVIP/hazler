@@ -11,8 +11,9 @@
 *~
 .DS_Store
 
-# Cargo
-Cargo.lock
+# Cargo - Keep Cargo.lock for binaries but ignore for libraries
+# For this workspace, we'll include it since we have a binary
+# Cargo.lock
 
 # Debug
 *.log

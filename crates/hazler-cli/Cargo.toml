@@ -1,0 +1,23 @@
+[package]
+name = "hazler-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "hazler"
+path = "src/main.rs"
+
+[dependencies]
+hazler-core = { path = "../hazler-core" }
+hazler-http = { path = "../hazler-http" }
+hazler-parser = { path = "../hazler-parser" }
+tokio = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }

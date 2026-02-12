@@ -121,11 +121,16 @@ impl JavaScriptParser {
     fn replace_template_vars(&self, url: &str) -> String {
         // Replace ${var} and {var} with placeholder values for discovery
         // Note: In production, use proper regex or parser for better handling
+        use once_cell::sync::Lazy;
+        
+        static TEMPLATE_VAR_RE: Lazy<regex::Regex> = Lazy::new(|| {
+            regex::Regex::new(r"\$\{[^}]+\}").unwrap()
+        });
+        
         let mut result = url.to_string();
         
-        // Replace ${variable} patterns
-        let re = regex::Regex::new(r"\$\{[^}]+\}").unwrap();
-        result = re.replace_all(&result, "").to_string();
+        // Replace ${variable} patterns with placeholders
+        result = TEMPLATE_VAR_RE.replace_all(&result, "0").to_string();
         
         // Replace common placeholder patterns with example values
         result = result
@@ -517,8 +522,8 @@ hazler https://example.com --fields url,status_code,links
 Tambahkan warning jika body dimasukkan dan ukurannya besar:
 
 ```rust
-// Threshold for warning about large body content
-const LARGE_BODY_THRESHOLD: usize = 100_000; // 100KB
+// Threshold for warning about large body content (approximately 100KB)
+const LARGE_BODY_THRESHOLD: usize = 100_000; // 100,000 bytes
 
 impl OutputFormatter {
     fn filter_page(&self, page: &Page) -> serde_json::Value {

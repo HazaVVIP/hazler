@@ -65,6 +65,7 @@ struct Args {
     /// - Applies regex patterns to JavaScript files
     /// - Generates URL variations
     /// - Discovers API endpoints more thoroughly
+    ///
     /// Warning: This may generate more requests
     #[arg(long)]
     aggressive: bool,

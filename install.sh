@@ -59,37 +59,31 @@ install_dependencies() {
                 return 1
             fi
             
+            # Check if running as root
+            local USE_SUDO=""
+            if [ "$(id -u)" -ne 0 ]; then
+                if command_exists sudo; then
+                    USE_SUDO="sudo"
+                else
+                    print_error "Not running as root and sudo is not available."
+                    print_error "Please run as root or install sudo, then install dependencies manually."
+                    return 1
+                fi
+            fi
+            
             case "$DISTRO" in
                 ubuntu|debian)
                     print_info "Detected Debian/Ubuntu"
-                    if command_exists sudo; then
-                        sudo apt update
-                        sudo apt install -y build-essential pkg-config libssl-dev
-                    else
-                        print_error "sudo not available. Please install dependencies manually:"
-                        print_error "  apt update && apt install -y build-essential pkg-config libssl-dev"
-                        return 1
-                    fi
+                    $USE_SUDO apt update
+                    $USE_SUDO apt install -y build-essential pkg-config libssl-dev
                     ;;
                 fedora|rhel|centos)
                     print_info "Detected Fedora/RHEL/CentOS"
-                    if command_exists sudo; then
-                        sudo dnf install -y gcc pkg-config openssl-devel
-                    else
-                        print_error "sudo not available. Please install dependencies manually:"
-                        print_error "  dnf install -y gcc pkg-config openssl-devel"
-                        return 1
-                    fi
+                    $USE_SUDO dnf install -y gcc pkg-config openssl-devel
                     ;;
                 arch|manjaro)
                     print_info "Detected Arch/Manjaro"
-                    if command_exists sudo; then
-                        sudo pacman -S --noconfirm base-devel pkg-config openssl
-                    else
-                        print_error "sudo not available. Please install dependencies manually:"
-                        print_error "  pacman -S base-devel pkg-config openssl"
-                        return 1
-                    fi
+                    $USE_SUDO pacman -S --noconfirm base-devel pkg-config openssl
                     ;;
                 *)
                     print_warning "Unsupported Linux distribution: $DISTRO"
@@ -117,13 +111,28 @@ install_dependencies() {
             fi
             ;;
         windows)
-            print_error "Automated installation on Windows is not supported"
-            print_error "Please install dependencies manually:"
-            print_error "  1. Install Visual Studio Build Tools: https://visualstudio.microsoft.com/downloads/"
-            print_error "  2. Install OpenSSL: https://slproweb.com/products/Win32OpenSSL.html"
-            print_error "  3. Install Rust: https://rustup.rs/"
-            print_error "  4. Run: cargo install --git https://github.com/HazaVVIP/hazler hazler-cli"
-            return 1
+            print_error "╔════════════════════════════════════════════════════════════════╗"
+            print_error "║  Automated installation on Windows is not supported yet       ║"
+            print_error "╚════════════════════════════════════════════════════════════════╝"
+            echo ""
+            print_info "Please follow these manual installation steps:"
+            echo ""
+            print_info "1. Install Visual Studio Build Tools:"
+            print_info "   → https://visualstudio.microsoft.com/downloads/"
+            echo ""
+            print_info "2. Install OpenSSL for Windows:"
+            print_info "   → https://slproweb.com/products/Win32OpenSSL.html"
+            echo ""
+            print_info "3. Install Rust (if not already installed):"
+            print_info "   → https://rustup.rs/"
+            echo ""
+            print_info "4. Install Hazler using cargo:"
+            print_info "   → cargo install --git https://github.com/HazaVVIP/hazler hazler-cli"
+            echo ""
+            print_warning "After installation, you may need to restart your terminal."
+            echo ""
+            # Exit explicitly with error code
+            exit 1
             ;;
         *)
             print_error "Unsupported operating system"
@@ -169,10 +178,8 @@ install_hazler() {
     
     # Check if we're in the hazler directory
     if [ -f "Cargo.toml" ] && grep -q "hazler" "Cargo.toml"; then
-        print_info "Building from local source..."
-        cargo build --release
-        
-        print_info "Installing to ~/.cargo/bin..."
+        print_info "Building and installing from local source..."
+        # cargo install handles both compilation and installation efficiently
         cargo install --path crates/hazler-cli
     else
         print_info "Installing from GitHub..."

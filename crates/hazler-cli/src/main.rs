@@ -41,9 +41,9 @@ struct Args {
     #[arg(short = 'o', long, default_value = "jsonl")]
     output_format: String,
 
-    /// Exclude response body from output (reduces size)
+    /// Include response body in output (body is excluded by default to prevent flooding)
     #[arg(long)]
-    exclude_body: bool,
+    include_body: bool,
 
     /// Select specific fields to output (comma-separated: url,status_code,depth,links)
     #[arg(long)]
@@ -113,7 +113,8 @@ async fn main() {
             }
 
             // Create output formatter
-            let formatter = OutputFormatter::new(args.exclude_body, args.fields);
+            // Body is excluded by default, so we need to invert include_body
+            let formatter = OutputFormatter::new(!args.include_body, args.fields);
 
             // Output results based on format
             match args.output_format.as_str() {

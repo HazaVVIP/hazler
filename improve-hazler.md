@@ -3,6 +3,8 @@
 ## Tujuan
 Dokumen ini berisi system prompt dan saran pengembangan untuk meningkatkan kemampuan Hazler agar setidaknya dapat mengimbangi kemampuan katana dalam menemukan endpoint, khususnya melalui mesin regex yang lebih agresif dan normalisasi URL yang lebih kompleks.
 
+> **Catatan**: Contoh kode dalam dokumen ini bersifat ilustratif dan menunjukkan konsep implementasi. Kode aktual mungkin memerlukan penyesuaian, error handling yang lebih baik, dan testing yang komprehensif sebelum digunakan dalam production.
+
 ---
 
 ## 1. Peningkatan Mesin Regex untuk Ekstraksi Endpoint JavaScript
@@ -117,13 +119,22 @@ impl JavaScriptParser {
     }
     
     fn replace_template_vars(&self, url: &str) -> String {
-        // Replace ${var} with placeholder values for discovery
-        url.replace("${", "{")
-           .replace("}", "")
-           // Common patterns
-           .replace("{id}", "1")
-           .replace("{userId}", "1")
-           .replace("{uuid}", "00000000-0000-0000-0000-000000000000")
+        // Replace ${var} and {var} with placeholder values for discovery
+        // Note: In production, use proper regex or parser for better handling
+        let mut result = url.to_string();
+        
+        // Replace ${variable} patterns
+        let re = regex::Regex::new(r"\$\{[^}]+\}").unwrap();
+        result = re.replace_all(&result, "").to_string();
+        
+        // Replace common placeholder patterns with example values
+        result = result
+            .replace("{id}", "1")
+            .replace("{userId}", "1")
+            .replace("{uuid}", "00000000-0000-0000-0000-000000000000")
+            .replace("{slug}", "example");
+        
+        result
     }
 }
 ```
@@ -292,7 +303,9 @@ impl AdvancedUrlNormalizer {
         
         // 5. Remove file extension (discover directory)
         if let Some(idx) = path.rfind('.') {
-            if idx > path.rfind('/').unwrap_or(0) {
+            // Check if dot is in the last path segment (not in directory name)
+            let last_slash_idx = path.rfind('/').unwrap_or(0);
+            if idx > last_slash_idx {
                 let mut no_ext = normalized.clone();
                 no_ext.set_path(&path[..idx]);
                 variants.push(no_ext);
@@ -354,9 +367,20 @@ impl AdvancedUrlNormalizer {
         
         // Sort query parameters
         if let Some(query) = canonical.query() {
-            let mut params: Vec<_> = query.split('&').collect();
+            let mut params: Vec<(&str, &str)> = query
+                .split('&')
+                .filter_map(|p| {
+                    let mut parts = p.splitn(2, '=');
+                    Some((parts.next()?, parts.next().unwrap_or("")))
+                })
+                .collect();
             params.sort();
-            canonical.set_query(Some(&params.join("&")));
+            let sorted_query: String = params
+                .iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect::<Vec<_>>()
+                .join("&");
+            canonical.set_query(Some(&sorted_query));
         }
         
         // Lowercase scheme and host
@@ -493,6 +517,9 @@ hazler https://example.com --fields url,status_code,links
 Tambahkan warning jika body dimasukkan dan ukurannya besar:
 
 ```rust
+// Threshold for warning about large body content
+const LARGE_BODY_THRESHOLD: usize = 100_000; // 100KB
+
 impl OutputFormatter {
     fn filter_page(&self, page: &Page) -> serde_json::Value {
         let mut data = json!({
@@ -503,7 +530,7 @@ impl OutputFormatter {
 
         if !self.exclude_body {
             // Warn if body is very large
-            if page.body.len() > 100_000 {  // 100KB threshold
+            if page.body.len() > LARGE_BODY_THRESHOLD {
                 eprintln!("Warning: Large body content for {} ({} bytes)", 
                          page.url, page.body.len());
             }

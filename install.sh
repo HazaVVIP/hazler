@@ -180,6 +180,7 @@ install_hazler() {
     if [ -f "Cargo.toml" ] && grep -q "hazler" "Cargo.toml"; then
         print_info "Building and installing from local source..."
         # cargo install handles both compilation and installation efficiently
+        # This avoids the double compilation that would occur with 'cargo build' followed by 'cargo install'
         cargo install --path crates/hazler-cli
     else
         print_info "Installing from GitHub..."

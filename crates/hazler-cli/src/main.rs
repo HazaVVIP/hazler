@@ -1,10 +1,12 @@
 use clap::Parser;
 use hazler_core::{Config, Crawler};
-use serde_json;
 use std::process;
 use tracing::{error, Level};
 use tracing_subscriber;
 use url::Url;
+
+mod output;
+use output::{OutputFormatter, generate_stats, generate_report};
 
 #[derive(Parser, Debug)]
 #[command(name = "hazler")]
@@ -36,9 +38,25 @@ struct Args {
     #[arg(short = 't', long, default_value = "10")]
     timeout: u64,
 
-    /// Output format (json or jsonl)
+    /// Output format (json, jsonl, urls, csv, or tree)
     #[arg(short = 'o', long, default_value = "jsonl")]
     output_format: String,
+
+    /// Exclude response body from output (reduces size)
+    #[arg(long)]
+    exclude_body: bool,
+
+    /// Select specific fields to output (comma-separated: url,status_code,depth,links)
+    #[arg(long)]
+    fields: Option<String>,
+
+    /// Show crawl statistics
+    #[arg(long)]
+    stats: bool,
+
+    /// Generate summary report
+    #[arg(long)]
+    report: bool,
 
     /// Verbose output
     #[arg(short = 'v', long)]
@@ -84,11 +102,20 @@ async fn main() {
 
     match crawler.crawl(start_url).await {
         Ok(result) => {
-            // Output results
+            // Generate report if requested (to stderr, doesn't interfere with output)
+            if args.report {
+                eprintln!("{}", generate_report(&result));
+            } else if args.stats {
+                eprintln!("{}", generate_stats(&result));
+            }
+
+            // Create output formatter
+            let formatter = OutputFormatter::new(args.exclude_body, args.fields);
+
+            // Output results based on format
             match args.output_format.as_str() {
                 "json" => {
-                    // Output as single JSON object
-                    match serde_json::to_string_pretty(&result) {
+                    match formatter.format_json(&result) {
                         Ok(json) => println!("{}", json),
                         Err(e) => {
                             error!("Failed to serialize results: {}", e);
@@ -97,32 +124,45 @@ async fn main() {
                     }
                 }
                 "jsonl" => {
-                    // Output as JSON Lines (one page per line)
-                    for page in &result.pages {
-                        match serde_json::to_string(&page) {
-                            Ok(json) => println!("{}", json),
-                            Err(e) => {
-                                error!("Failed to serialize page: {}", e);
+                    match formatter.format_jsonl(&result) {
+                        Ok(lines) => {
+                            for line in lines {
+                                println!("{}", line);
                             }
+                        }
+                        Err(e) => {
+                            error!("Failed to serialize results: {}", e);
+                            process::exit(1);
                         }
                     }
                 }
+                "urls" => {
+                    println!("{}", formatter.format_urls(&result));
+                }
+                "csv" => {
+                    println!("{}", formatter.format_csv(&result));
+                }
+                "tree" => {
+                    println!("{}", formatter.format_tree(&result));
+                }
                 _ => {
-                    error!("Unknown output format: {}", args.output_format);
+                    error!("Unknown output format: {}. Valid formats: json, jsonl, urls, csv, tree", args.output_format);
                     process::exit(1);
                 }
             }
 
-            // Print summary to stderr
-            eprintln!("\n=== Crawl Summary ===");
-            eprintln!("Total pages crawled: {}", result.total_pages);
-            eprintln!("Total URLs discovered: {}", result.total_urls);
-            eprintln!("Errors: {}", result.errors.len());
-            
-            if !result.errors.is_empty() && args.verbose {
-                eprintln!("\n=== Errors ===");
-                for error in &result.errors {
-                    eprintln!("  - {}", error);
+            // Print summary to stderr (unless --stats or --report was used)
+            if !args.stats && !args.report {
+                eprintln!("\n=== Crawl Summary ===");
+                eprintln!("Total pages crawled: {}", result.total_pages);
+                eprintln!("Total URLs discovered: {}", result.total_urls);
+                eprintln!("Errors: {}", result.errors.len());
+                
+                if !result.errors.is_empty() && args.verbose {
+                    eprintln!("\n=== Errors ===");
+                    for error in &result.errors {
+                        eprintln!("  - {}", error);
+                    }
                 }
             }
         }

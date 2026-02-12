@@ -74,6 +74,45 @@ chmod +x install.sh
 ./install.sh
 ```
 
+### Download Pre-built Binaries
+
+Download the latest release for your platform from the [releases page](https://github.com/HazaVVIP/hazler/releases):
+
+- **Linux (x86_64):** `hazler-linux-x86_64.tar.gz`
+- **Linux (aarch64):** `hazler-linux-aarch64.tar.gz`
+- **macOS (Intel):** `hazler-macos-x86_64.tar.gz`
+- **macOS (Apple Silicon):** `hazler-macos-aarch64.tar.gz`
+- **Windows:** `hazler-windows-x86_64.exe.zip`
+
+Extract and verify:
+
+```bash
+# Linux/macOS
+tar xzf hazler-*.tar.gz
+./hazler --version
+
+# Optionally, move to system path
+sudo mv hazler /usr/local/bin/
+```
+
+### Docker
+
+Run Hazler in a Docker container:
+
+```bash
+# Pull the image
+docker pull ghcr.io/hazavvip/hazler:latest
+
+# Run a crawl
+docker run --rm ghcr.io/hazavvip/hazler:latest https://example.com
+
+# Save output to file
+docker run --rm ghcr.io/hazavvip/hazler:latest https://example.com > results.jsonl
+
+# With custom options
+docker run --rm ghcr.io/hazavvip/hazler:latest https://example.com -d 2 -c 5 -o json
+```
+
 ### Build from Source
 
 ```bash
@@ -157,7 +196,11 @@ Options:
   -p, --max-pages <MAX_PAGES>          Maximum number of pages to crawl (0 = unlimited) [default: 0]
   -u, --user-agent <USER_AGENT>        Custom user agent string [default: Hazler/0.1.0]
   -t, --timeout <TIMEOUT>              Request timeout in seconds [default: 10]
-  -o, --output-format <OUTPUT_FORMAT>  Output format (json or jsonl) [default: jsonl]
+  -o, --output-format <OUTPUT_FORMAT>  Output format (json, jsonl, urls, csv, or tree) [default: jsonl]
+      --exclude-body                   Exclude response body from output (reduces size)
+      --fields <FIELDS>                Select specific fields to output (comma-separated)
+      --stats                          Show crawl statistics
+      --report                         Generate summary report
   -v, --verbose                        Verbose output
   -h, --help                           Print help
   -V, --version                        Print version
@@ -180,12 +223,49 @@ Output as single JSON object:
 hazler https://example.com -o json
 ```
 
+Output as URL list:
+```bash
+hazler https://example.com -o urls
+```
+
+Output as CSV:
+```bash
+hazler https://example.com -o csv > results.csv
+```
+
+Output as tree structure:
+```bash
+hazler https://example.com -o tree
+```
+
+Exclude body content (smaller output):
+```bash
+hazler https://example.com --exclude-body
+```
+
+Select specific fields:
+```bash
+hazler https://example.com --fields url,status_code,depth
+```
+
+Show statistics:
+```bash
+hazler https://example.com --stats
+```
+
+Generate full report:
+```bash
+hazler https://example.com --report
+```
+
 Verbose logging:
 ```bash
 hazler https://example.com -v
 ```
 
 ## Output Formats
+
+Hazler supports multiple output formats to suit different use cases:
 
 ### JSONL (default)
 Each line is a JSON object representing a crawled page:
@@ -203,6 +283,31 @@ Single JSON object with all results:
   "total_urls": 25,
   "errors": []
 }
+```
+
+### URLs
+Simple list of URLs (one per line):
+```
+https://example.com/
+https://example.com/page1
+https://example.com/page2
+```
+
+### CSV
+Comma-separated values with headers:
+```csv
+url,status_code,depth,content_type,num_links
+"https://example.com/",200,0,"text/html",10
+"https://example.com/page1",200,1,"text/html",5
+```
+
+### Tree
+Visual tree structure showing site hierarchy:
+```
+✓ [200] https://example.com/ (10 links)
+  ✓ [200] https://example.com/page1 (5 links)
+    ✓ [200] https://example.com/page1/sub (2 links)
+  ✓ [200] https://example.com/page2 (3 links)
 ```
 
 ## Output Processing Examples

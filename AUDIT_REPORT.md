@@ -28,11 +28,6 @@ Hazler is a next-generation web crawler built in Rust, currently at Phase 1 (MVP
 4. **Limited Output Options (MEDIUM):** Only JSON/JSONL, no filtering or transformation options
 5. **No Configuration File Support (MEDIUM):** All options must be passed via CLI flags
 
-**Recommended Priority Order:**
-1. **Week 1 (Critical):** Fix installation documentation, add prerequisites section
-2. **Week 2-3 (High):** Add configuration file support, improve output filtering
-3. **Week 4+ (Improvements):** Add installation scripts, pre-built binaries, enhanced documentation
-
 ---
 
 ## 1. INSTALLATION AUDIT

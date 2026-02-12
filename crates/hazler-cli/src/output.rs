@@ -31,6 +31,7 @@ impl OutputFormatter {
         });
 
         // Threshold for warning about large body content (100KB)
+        // TODO: Make this configurable via CLI or env variable
         const LARGE_BODY_THRESHOLD: usize = 100_000;
 
         if !self.exclude_body {

@@ -130,7 +130,7 @@ impl JavaScriptParser {
 
 impl Default for JavaScriptParser {
     fn default() -> Self {
-        Self::new().expect("Failed to create default JavaScriptParser")
+        Self::new().unwrap_or_else(|e| panic!("Failed to create default JavaScriptParser: {}", e))
     }
 }
 
@@ -205,7 +205,7 @@ impl FrameFileParser {
 
 impl Default for FrameFileParser {
     fn default() -> Self {
-        Self::new().expect("Failed to create default FrameFileParser")
+        Self::new().unwrap_or_else(|e| panic!("Failed to create default FrameFileParser: {}", e))
     }
 }
 

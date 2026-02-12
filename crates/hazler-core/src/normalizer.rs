@@ -12,32 +12,32 @@ impl AdvancedUrlNormalizer {
 
     /// Normalize URL with various strategies (generates variants)
     pub fn normalize(&self, url: &Url) -> Vec<Url> {
-        let mut variants = Vec::new();
+        let mut variants = std::collections::HashSet::new();
 
         // 1. Base URL (current behavior)
         let mut normalized = url.clone();
         normalized.set_fragment(None);
-        variants.push(normalized.clone());
+        variants.insert(normalized.clone());
 
         // 2. Remove trailing slash
         if let Some(path) = normalized.path().strip_suffix('/') {
             if !path.is_empty() {
                 let mut no_slash = normalized.clone();
                 no_slash.set_path(path);
-                variants.push(no_slash);
+                variants.insert(no_slash);
             }
         } else if !normalized.path().ends_with('/') {
             // Add trailing slash
             let mut with_slash = normalized.clone();
             with_slash.set_path(&format!("{}/", normalized.path()));
-            variants.push(with_slash);
+            variants.insert(with_slash);
         }
 
         // 3. Remove query parameters (discover base endpoint)
         if normalized.query().is_some() {
             let mut no_query = normalized.clone();
             no_query.set_query(None);
-            variants.push(no_query);
+            variants.insert(no_query);
         }
 
         // 4. Common file extensions
@@ -47,7 +47,7 @@ impl AdvancedUrlNormalizer {
             for ext in &["json", "xml", "html", "txt"] {
                 let mut with_ext = normalized.clone();
                 with_ext.set_path(&format!("{}.{}", path.trim_end_matches('/'), ext));
-                variants.push(with_ext);
+                variants.insert(with_ext);
             }
         }
 
@@ -58,15 +58,14 @@ impl AdvancedUrlNormalizer {
             if idx > last_slash_idx {
                 let mut no_ext = normalized.clone();
                 no_ext.set_path(&path[..idx]);
-                variants.push(no_ext);
+                variants.insert(no_ext);
             }
         }
 
-        // Deduplicate
-        variants.sort_by(|a, b| a.as_str().cmp(b.as_str()));
-        variants.dedup();
-
-        variants
+        // Convert to Vec and sort for consistent ordering
+        let mut result: Vec<_> = variants.into_iter().collect();
+        result.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        result
     }
 
     /// Generate common API path variations
@@ -223,6 +222,21 @@ mod tests {
 
         // Should be the same after canonicalization
         assert_eq!(canon1, canon2);
+    }
+
+    #[test]
+    fn test_canonicalize_path_normalization() {
+        let normalizer = AdvancedUrlNormalizer::new();
+        
+        // Test consecutive slashes - URL crate handles this
+        let url1 = Url::parse("https://example.com/path//to///resource").unwrap();
+        let canon1 = normalizer.canonicalize(&url1);
+        assert!(canon1.contains("/path//to///resource")); // URL preserves these
+        
+        // Test percent encoding
+        let url2 = Url::parse("https://example.com/path%20with%20spaces").unwrap();
+        let canon2 = normalizer.canonicalize(&url2);
+        assert!(canon2.contains("path%20with%20spaces"));
     }
 
     #[test]

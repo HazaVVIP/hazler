@@ -222,16 +222,13 @@ impl Crawler {
 
         // If aggressive mode, generate URL variants
         if aggressive {
-            let mut all_links = links.clone();
+            let mut variants = Vec::new();
             for link in &links {
-                let variants = url_normalizer.normalize(link);
-                all_links.extend(variants);
-
+                variants.extend(url_normalizer.normalize(link));
                 // Also try API variations for API-looking URLs
-                let api_variants = url_normalizer.generate_api_variations(link);
-                all_links.extend(api_variants);
+                variants.extend(url_normalizer.generate_api_variations(link));
             }
-            links = all_links;
+            links.extend(variants);
         }
 
         // Deduplicate links using canonicalization

@@ -41,7 +41,8 @@ impl OutputFormatter {
         // If specific fields are requested, filter to only those
         if let Some(ref fields) = self.fields {
             let mut filtered = serde_json::Map::new();
-            let obj = data.as_object().unwrap();
+            let obj = data.as_object()
+                .expect("filter_page: data should always be a JSON object");
             
             for field in fields {
                 if let Some(value) = obj.get(field) {

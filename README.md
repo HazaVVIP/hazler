@@ -197,7 +197,7 @@ Options:
   -u, --user-agent <USER_AGENT>        Custom user agent string [default: Hazler/0.1.0]
   -t, --timeout <TIMEOUT>              Request timeout in seconds [default: 10]
   -o, --output-format <OUTPUT_FORMAT>  Output format (json, jsonl, urls, csv, or tree) [default: jsonl]
-      --exclude-body                   Exclude response body from output (reduces size)
+      --include-body                   Include response body in output (excluded by default)
       --fields <FIELDS>                Select specific fields to output (comma-separated)
       --stats                          Show crawl statistics
       --report                         Generate summary report
@@ -238,9 +238,9 @@ Output as tree structure:
 hazler https://example.com -o tree
 ```
 
-Exclude body content (smaller output):
+Include body content (excluded by default):
 ```bash
-hazler https://example.com --exclude-body
+hazler https://example.com --include-body
 ```
 
 Select specific fields:

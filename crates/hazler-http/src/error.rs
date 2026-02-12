@@ -4,13 +4,13 @@ use thiserror::Error;
 pub enum Error {
     #[error("HTTP request failed: {0}")]
     RequestFailed(#[from] reqwest::Error),
-    
+
     #[error("Invalid URL: {0}")]
     InvalidUrl(String),
-    
+
     #[error("Timeout")]
     Timeout,
-    
+
     #[error("Too many redirects")]
     TooManyRedirects,
 }

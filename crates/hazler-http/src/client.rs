@@ -32,15 +32,10 @@ impl HttpClient {
     pub async fn fetch(&self, url: &Url) -> Result<HttpResponse> {
         debug!("Fetching URL: {}", url);
 
-        let response = self
-            .client
-            .get(url.as_str())
-            .send()
-            .await
-            .map_err(|e| {
-                warn!("Failed to fetch {}: {}", url, e);
-                Error::RequestFailed(e)
-            })?;
+        let response = self.client.get(url.as_str()).send().await.map_err(|e| {
+            warn!("Failed to fetch {}: {}", url, e);
+            Error::RequestFailed(e)
+        })?;
 
         let status_code = response.status().as_u16();
         let headers = response
@@ -57,7 +52,12 @@ impl HttpClient {
 
         let body = response.text().await.map_err(Error::RequestFailed)?;
 
-        debug!("Fetched {} - status: {}, size: {} bytes", url, status_code, body.len());
+        debug!(
+            "Fetched {} - status: {}, size: {} bytes",
+            url,
+            status_code,
+            body.len()
+        );
 
         Ok(HttpResponse {
             url: url.clone(),

@@ -20,10 +20,8 @@ pub struct Crawler {
 impl Crawler {
     /// Create a new crawler with the given configuration
     pub fn new(config: Config) -> anyhow::Result<Self> {
-        let http_client = HttpClient::new(
-            &config.user_agent,
-            Duration::from_secs(config.timeout_secs),
-        )?;
+        let http_client =
+            HttpClient::new(&config.user_agent, Duration::from_secs(config.timeout_secs))?;
         let parser = HtmlParser::new();
 
         Ok(Self {
@@ -71,7 +69,15 @@ impl Crawler {
 
                     let task = tokio::spawn(async move {
                         let _permit = semaphore.acquire().await.unwrap();
-                        Self::crawl_page(url, depth, http_client, parser, scope_validator, max_depth).await
+                        Self::crawl_page(
+                            url,
+                            depth,
+                            http_client,
+                            parser,
+                            scope_validator,
+                            max_depth,
+                        )
+                        .await
                     });
 
                     active_tasks.push(task);
@@ -80,20 +86,21 @@ impl Crawler {
 
             // Wait for at least one task to complete
             if !active_tasks.is_empty() {
-                let (completed_result, _index, remaining) = futures::future::select_all(active_tasks).await;
+                let (completed_result, _index, remaining) =
+                    futures::future::select_all(active_tasks).await;
                 active_tasks = remaining;
 
                 match completed_result {
                     Ok(Ok((page, new_urls))) => {
                         result.total_pages += 1;
-                        
+
                         // Add new URLs to queue
                         for (new_url, new_depth) in new_urls {
                             if queue.push(new_url, new_depth) {
                                 result.total_urls += 1;
                             }
                         }
-                        
+
                         result.pages.push(page);
                     }
                     Ok(Err(e)) => {
@@ -113,8 +120,12 @@ impl Crawler {
             }
         }
 
-        info!("Crawl completed. Pages: {}, URLs discovered: {}, Errors: {}", 
-              result.total_pages, result.total_urls, result.errors.len());
+        info!(
+            "Crawl completed. Pages: {}, URLs discovered: {}, Errors: {}",
+            result.total_pages,
+            result.total_urls,
+            result.errors.len()
+        );
 
         Ok(result)
     }

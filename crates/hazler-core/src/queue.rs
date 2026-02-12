@@ -25,11 +25,11 @@ impl UrlQueue {
     /// Add a URL to the queue if not already visited or queued
     pub fn push(&mut self, url: Url, depth: usize) -> bool {
         let url_str = url.as_str();
-        
+
         if self.visited.contains(url_str) || self.queued.contains(url_str) {
             return false;
         }
-        
+
         self.queued.insert(url_str.to_string());
         self.queue.push_back((url, depth));
         true
@@ -87,10 +87,10 @@ mod tests {
     fn test_queue_push_pop() {
         let mut queue = UrlQueue::new();
         let url = Url::parse("https://example.com").unwrap();
-        
+
         assert!(queue.push(url.clone(), 0));
         assert_eq!(queue.len(), 1);
-        
+
         let (popped_url, depth) = queue.pop().unwrap();
         assert_eq!(popped_url, url);
         assert_eq!(depth, 0);
@@ -101,7 +101,7 @@ mod tests {
     fn test_queue_deduplication() {
         let mut queue = UrlQueue::new();
         let url = Url::parse("https://example.com").unwrap();
-        
+
         assert!(queue.push(url.clone(), 0));
         assert!(!queue.push(url.clone(), 0)); // Should not add duplicate
         assert_eq!(queue.len(), 1);
@@ -111,7 +111,7 @@ mod tests {
     fn test_visited_tracking() {
         let mut queue = UrlQueue::new();
         let url = Url::parse("https://example.com").unwrap();
-        
+
         assert!(!queue.is_visited(&url));
         queue.mark_visited(&url);
         assert!(queue.is_visited(&url));

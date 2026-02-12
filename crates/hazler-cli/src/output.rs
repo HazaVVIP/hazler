@@ -322,3 +322,41 @@ pub fn generate_report(result: &CrawlResult) -> String {
 
     output
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hazler_core::{CrawlResult, Page};
+    use url::Url;
+
+    #[test]
+    fn test_exclude_body_by_default() {
+        let page = Page {
+            url: Url::parse("https://example.com").unwrap(),
+            status_code: 200,
+            body: "Large body content that should be excluded".to_string(),
+            headers: Default::default(),
+            content_type: Some("text/html".to_string()),
+            links: vec![],
+            depth: 0,
+        };
+
+        let result = CrawlResult {
+            pages: vec![page],
+            total_pages: 1,
+            total_urls: 1,
+            errors: vec![],
+        };
+
+        // Test with exclude_body = true (default behavior)
+        let formatter = OutputFormatter::new(true, None);
+        let json = formatter.format_json(&result).unwrap();
+        assert!(!json.contains("Large body content"), "Body should be excluded by default");
+        assert!(json.contains("https://example.com"), "URL should still be present");
+
+        // Test with exclude_body = false (when --include-body is used)
+        let formatter_with_body = OutputFormatter::new(false, None);
+        let json_with_body = formatter_with_body.format_json(&result).unwrap();
+        assert!(json_with_body.contains("Large body content"), "Body should be included when --include-body is used");
+    }
+}

@@ -12,6 +12,18 @@ use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
 use url::Url;
 
+/// Context for crawling a page, containing all necessary dependencies
+struct CrawlPageContext {
+    http_client: HttpClient,
+    parser: HtmlParser,
+    js_parser: JavaScriptParser,
+    frame_parser: FrameFileParser,
+    url_normalizer: AdvancedUrlNormalizer,
+    scope_validator: ScopeValidator,
+    max_depth: usize,
+    aggressive: bool,
+}
+
 /// Main crawler implementation
 pub struct Crawler {
     config: Config,
@@ -86,9 +98,7 @@ impl Crawler {
 
                     let task = tokio::spawn(async move {
                         let _permit = semaphore.acquire().await.unwrap();
-                        Self::crawl_page(
-                            url,
-                            depth,
+                        let context = CrawlPageContext {
                             http_client,
                             parser,
                             js_parser,
@@ -97,8 +107,8 @@ impl Crawler {
                             scope_validator,
                             max_depth,
                             aggressive,
-                        )
-                        .await
+                        };
+                        Self::crawl_page(url, depth, context).await
                     });
 
                     active_tasks.push(task);
@@ -155,19 +165,12 @@ impl Crawler {
     async fn crawl_page(
         url: Url,
         depth: usize,
-        http_client: HttpClient,
-        parser: HtmlParser,
-        js_parser: JavaScriptParser,
-        frame_parser: FrameFileParser,
-        url_normalizer: AdvancedUrlNormalizer,
-        scope_validator: ScopeValidator,
-        max_depth: usize,
-        aggressive: bool,
+        context: CrawlPageContext,
     ) -> anyhow::Result<(Page, Vec<(Url, usize)>)> {
         info!("Crawling: {} (depth: {})", url, depth);
 
         // Fetch the page
-        let response = http_client.fetch(&url).await?;
+        let response = context.http_client.fetch(&url).await?;
 
         let content_type = response.content_type.as_deref().unwrap_or("");
         let mut links = Vec::new();
@@ -175,7 +178,7 @@ impl Crawler {
         // Determine which parser to use based on content type and file extension
         if content_type.contains("text/html") {
             // HTML content - use HTML parser
-            match parser.extract_links(&response.body, &url) {
+            match context.parser.extract_links(&response.body, &url) {
                 Ok(extracted_links) => {
                     links = extracted_links;
                 }
@@ -189,7 +192,7 @@ impl Crawler {
             || url.path().ends_with(".json")
         {
             // JavaScript or JSON content - use JS parser
-            let extracted = js_parser.extract_endpoints(&response.body, &url);
+            let extracted = context.js_parser.extract_endpoints(&response.body, &url);
             info!(
                 "Extracted {} endpoints from JavaScript at {}",
                 extracted.len(),
@@ -198,7 +201,7 @@ impl Crawler {
             links = extracted;
         } else if url.path().ends_with(".frame") {
             // Frame file - use frame parser
-            let extracted = frame_parser.extract_endpoints(&response.body, &url);
+            let extracted = context.frame_parser.extract_endpoints(&response.body, &url);
             info!(
                 "Extracted {} endpoints from .frame file at {}",
                 extracted.len(),
@@ -208,8 +211,8 @@ impl Crawler {
         }
 
         // If aggressive mode is enabled, also try JS parser on HTML content
-        if aggressive && content_type.contains("text/html") {
-            let js_endpoints = js_parser.extract_endpoints(&response.body, &url);
+        if context.aggressive && content_type.contains("text/html") {
+            let js_endpoints = context.js_parser.extract_endpoints(&response.body, &url);
             if !js_endpoints.is_empty() {
                 info!(
                     "Extracted {} additional endpoints from inline JS at {}",
@@ -221,12 +224,12 @@ impl Crawler {
         }
 
         // If aggressive mode, generate URL variants
-        if aggressive {
+        if context.aggressive {
             let mut variants = Vec::new();
             for link in &links {
-                variants.extend(url_normalizer.normalize(link));
+                variants.extend(context.url_normalizer.normalize(link));
                 // Also try API variations for API-looking URLs
-                variants.extend(url_normalizer.generate_api_variations(link));
+                variants.extend(context.url_normalizer.generate_api_variations(link));
             }
             links.extend(variants);
         }
@@ -234,7 +237,7 @@ impl Crawler {
         // Deduplicate links using canonicalization
         let mut seen = std::collections::HashSet::new();
         links.retain(|link| {
-            let canonical = url_normalizer.canonicalize(link);
+            let canonical = context.url_normalizer.canonicalize(link);
             seen.insert(canonical)
         });
 
@@ -247,8 +250,8 @@ impl Crawler {
         // Filter links by scope and depth
         let new_urls: Vec<(Url, usize)> = links
             .into_iter()
-            .filter(|link| scope_validator.is_in_scope(link))
-            .filter(|_| depth < max_depth)
+            .filter(|link| context.scope_validator.is_in_scope(link))
+            .filter(|_| depth < context.max_depth)
             .map(|link| (link, depth + 1))
             .collect();
 

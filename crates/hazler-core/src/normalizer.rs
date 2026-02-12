@@ -136,9 +136,8 @@ impl AdvancedUrlNormalizer {
 
         if let Some(port) = canonical.port() {
             // Only include port if non-standard
-            let standard_port =
-                (canonical.scheme() == "http" && port == 80)
-                    || (canonical.scheme() == "https" && port == 443);
+            let standard_port = (canonical.scheme() == "http" && port == 80)
+                || (canonical.scheme() == "https" && port == 443);
             if !standard_port {
                 result.push(':');
                 result.push_str(&port.to_string());
@@ -227,12 +226,12 @@ mod tests {
     #[test]
     fn test_canonicalize_path_normalization() {
         let normalizer = AdvancedUrlNormalizer::new();
-        
+
         // Test consecutive slashes - URL crate handles this
         let url1 = Url::parse("https://example.com/path//to///resource").unwrap();
         let canon1 = normalizer.canonicalize(&url1);
         assert!(canon1.contains("/path//to///resource")); // URL preserves these
-        
+
         // Test percent encoding
         let url2 = Url::parse("https://example.com/path%20with%20spaces").unwrap();
         let canon2 = normalizer.canonicalize(&url2);

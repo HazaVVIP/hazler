@@ -13,6 +13,12 @@ edition = "2021"
 authors = ["Hazler Team"]
 license = "MIT"
 repository = "https://github.com/HazaVVIP/hazler"
+homepage = "https://github.com/HazaVVIP/hazler"
+documentation = "https://docs.rs/hazler"
+description = "Next-generation intelligent web crawler built in Rust"
+keywords = ["crawler", "spider", "web-scraping", "http", "async"]
+categories = ["web-programming", "network-programming", "command-line-utilities"]
+readme = "README.md"
 
 [workspace.dependencies]
 tokio = { version = "1.35", features = ["full"] }

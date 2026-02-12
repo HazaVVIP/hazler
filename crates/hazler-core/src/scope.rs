@@ -12,11 +12,8 @@ pub struct ScopeValidator {
 impl ScopeValidator {
     /// Create a new scope validator for a given URL
     pub fn new(base_url: &Url) -> Self {
-        let domain = base_url
-            .host_str()
-            .unwrap_or_default()
-            .to_string();
-        
+        let domain = base_url.host_str().unwrap_or_default().to_string();
+
         Self {
             base_domains: vec![domain],
             allow_subdomains: false,
@@ -73,7 +70,7 @@ mod tests {
     fn test_same_domain() {
         let base = Url::parse("https://example.com").unwrap();
         let validator = ScopeValidator::new(&base);
-        
+
         let url = Url::parse("https://example.com/page").unwrap();
         assert!(validator.is_in_scope(&url));
     }
@@ -82,7 +79,7 @@ mod tests {
     fn test_different_domain() {
         let base = Url::parse("https://example.com").unwrap();
         let validator = ScopeValidator::new(&base);
-        
+
         let url = Url::parse("https://other.com/page").unwrap();
         assert!(!validator.is_in_scope(&url));
     }
@@ -91,7 +88,7 @@ mod tests {
     fn test_subdomain_disallowed() {
         let base = Url::parse("https://example.com").unwrap();
         let validator = ScopeValidator::new(&base);
-        
+
         let url = Url::parse("https://sub.example.com/page").unwrap();
         assert!(!validator.is_in_scope(&url));
     }
@@ -100,7 +97,7 @@ mod tests {
     fn test_subdomain_allowed() {
         let base = Url::parse("https://example.com").unwrap();
         let validator = ScopeValidator::new(&base).allow_subdomains(true);
-        
+
         let url = Url::parse("https://sub.example.com/page").unwrap();
         assert!(validator.is_in_scope(&url));
     }

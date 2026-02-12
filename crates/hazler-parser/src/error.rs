@@ -4,7 +4,7 @@ use thiserror::Error;
 pub enum Error {
     #[error("Failed to parse HTML: {0}")]
     ParseError(String),
-    
+
     #[error("Invalid URL: {0}")]
     InvalidUrl(#[from] url::ParseError),
 }

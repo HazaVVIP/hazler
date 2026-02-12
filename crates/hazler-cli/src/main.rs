@@ -2,11 +2,10 @@ use clap::Parser;
 use hazler_core::{Config, Crawler};
 use std::process;
 use tracing::{error, Level};
-use tracing_subscriber;
 use url::Url;
 
 mod output;
-use output::{OutputFormatter, generate_stats, generate_report};
+use output::{generate_report, generate_stats, OutputFormatter};
 
 #[derive(Parser, Debug)]
 #[command(name = "hazler")]
@@ -68,7 +67,11 @@ async fn main() {
     let args = Args::parse();
 
     // Setup logging
-    let log_level = if args.verbose { Level::DEBUG } else { Level::INFO };
+    let log_level = if args.verbose {
+        Level::DEBUG
+    } else {
+        Level::INFO
+    };
     tracing_subscriber::fmt()
         .with_max_level(log_level)
         .with_target(false)
@@ -114,28 +117,24 @@ async fn main() {
 
             // Output results based on format
             match args.output_format.as_str() {
-                "json" => {
-                    match formatter.format_json(&result) {
-                        Ok(json) => println!("{}", json),
-                        Err(e) => {
-                            error!("Failed to serialize results: {}", e);
-                            process::exit(1);
+                "json" => match formatter.format_json(&result) {
+                    Ok(json) => println!("{}", json),
+                    Err(e) => {
+                        error!("Failed to serialize results: {}", e);
+                        process::exit(1);
+                    }
+                },
+                "jsonl" => match formatter.format_jsonl(&result) {
+                    Ok(lines) => {
+                        for line in lines {
+                            println!("{}", line);
                         }
                     }
-                }
-                "jsonl" => {
-                    match formatter.format_jsonl(&result) {
-                        Ok(lines) => {
-                            for line in lines {
-                                println!("{}", line);
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to serialize results: {}", e);
-                            process::exit(1);
-                        }
+                    Err(e) => {
+                        error!("Failed to serialize results: {}", e);
+                        process::exit(1);
                     }
-                }
+                },
                 "urls" => {
                     println!("{}", formatter.format_urls(&result));
                 }
@@ -146,7 +145,10 @@ async fn main() {
                     println!("{}", formatter.format_tree(&result));
                 }
                 _ => {
-                    error!("Unknown output format: {}. Valid formats: json, jsonl, urls, csv, tree", args.output_format);
+                    error!(
+                        "Unknown output format: {}. Valid formats: json, jsonl, urls, csv, tree",
+                        args.output_format
+                    );
                     process::exit(1);
                 }
             }
@@ -157,7 +159,7 @@ async fn main() {
                 eprintln!("Total pages crawled: {}", result.total_pages);
                 eprintln!("Total URLs discovered: {}", result.total_urls);
                 eprintln!("Errors: {}", result.errors.len());
-                
+
                 if !result.errors.is_empty() && args.verbose {
                     eprintln!("\n=== Errors ===");
                     for error in &result.errors {

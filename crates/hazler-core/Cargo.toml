@@ -1,0 +1,22 @@
+[package]
+name = "hazler-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+url = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+futures = { workspace = true }
+hazler-http = { path = "../hazler-http" }
+hazler-parser = { path = "../hazler-parser" }
+hazler-js-parser = { path = "../hazler-js-parser" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

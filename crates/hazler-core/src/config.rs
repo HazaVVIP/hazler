@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 ///     .concurrency(20)
 ///     .max_pages(1000)
 ///     .user_agent("MyBot/1.0".to_string())
-///     .timeout_secs(30);
+///     .timeout_secs(30)
+///     .aggressive(true);
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -34,6 +35,8 @@ pub struct Config {
     pub follow_redirects: bool,
     /// Maximum number of redirects to follow
     pub max_redirects: usize,
+    /// Enable aggressive endpoint discovery mode
+    pub aggressive_discovery: bool,
 }
 
 impl Default for Config {
@@ -47,6 +50,7 @@ impl Default for Config {
             respect_robots: true,
             follow_redirects: true,
             max_redirects: 5,
+            aggressive_discovery: false,
         }
     }
 }
@@ -149,6 +153,28 @@ impl Config {
     /// ```
     pub fn timeout_secs(mut self, timeout: u64) -> Self {
         self.timeout_secs = timeout;
+        self
+    }
+
+    /// Enable or disable aggressive endpoint discovery mode.
+    ///
+    /// When enabled:
+    /// - Applies regex patterns to JavaScript files
+    /// - Generates URL variations
+    /// - Discovers API endpoints more thoroughly
+    ///
+    /// Warning: This may generate more requests.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().aggressive(true);
+    /// assert_eq!(config.aggressive_discovery, true);
+    /// ```
+    pub fn aggressive(mut self, enabled: bool) -> Self {
+        self.aggressive_discovery = enabled;
         self
     }
 }

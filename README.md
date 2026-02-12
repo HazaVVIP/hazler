@@ -7,9 +7,13 @@ A fast, efficient web crawler built in Rust.
 - ✅ HTTP-only crawling
 - ✅ Concurrent request handling with configurable concurrency
 - ✅ HTML parsing and link extraction
+- ✅ **JavaScript endpoint discovery** with regex-based extraction
+- ✅ **Advanced URL normalization** for better endpoint discovery
+- ✅ **Aggressive discovery mode** for security reconnaissance
+- ✅ **.frame file support** for endpoint extraction
 - ✅ Scope validation (stays within domain)
 - ✅ Depth control
-- ✅ JSONL output format
+- ✅ JSONL output format (body excluded by default for clean output)
 - ✅ Command-line interface with flexible options
 
 ## Prerequisites
@@ -197,8 +201,9 @@ Options:
   -u, --user-agent <USER_AGENT>        Custom user agent string [default: Hazler/0.1.0]
   -t, --timeout <TIMEOUT>              Request timeout in seconds [default: 10]
   -o, --output-format <OUTPUT_FORMAT>  Output format (json, jsonl, urls, csv, or tree) [default: jsonl]
-      --exclude-body                   Exclude response body from output (reduces size)
+      --include-body                   Include response body in output (excluded by default)
       --fields <FIELDS>                Select specific fields to output (comma-separated)
+      --aggressive                     Enable aggressive endpoint discovery mode
       --stats                          Show crawl statistics
       --report                         Generate summary report
   -v, --verbose                        Verbose output
@@ -238,9 +243,9 @@ Output as tree structure:
 hazler https://example.com -o tree
 ```
 
-Exclude body content (smaller output):
+Include body content (excluded by default):
 ```bash
-hazler https://example.com --exclude-body
+hazler https://example.com --include-body
 ```
 
 Select specific fields:
@@ -261,6 +266,82 @@ hazler https://example.com --report
 Verbose logging:
 ```bash
 hazler https://example.com -v
+```
+
+## Security Reconnaissance Features
+
+Hazler has been enhanced with powerful security reconnaissance capabilities for bug hunting and penetration testing:
+
+### JavaScript Endpoint Discovery
+
+Hazler automatically extracts endpoints from JavaScript files using advanced regex patterns:
+
+```bash
+# Crawl and extract JavaScript endpoints
+hazler https://target.com --aggressive
+```
+
+Supports extraction from:
+- **Fetch API calls**: `fetch('/api/users')`
+- **XMLHttpRequest**: `.open('GET', '/api/data')`
+- **Axios**: `axios.get('/api/posts')`
+- **jQuery AJAX**: `$.ajax({url: '/api/items'})`
+- **API definitions**: `const endpoint = '/api/v1/users'`
+- **Template literals**: `` `/api/${userId}` ``
+- **Router configs**: `path: '/admin/dashboard'`
+- **GraphQL endpoints**: `graphql: '/graphql'`
+- **WebSocket endpoints**: `wss://example.com/socket`
+
+### Aggressive Discovery Mode
+
+Enable comprehensive endpoint discovery with the `--aggressive` flag:
+
+```bash
+hazler https://target.com --aggressive -d 3
+```
+
+In aggressive mode, Hazler:
+- ✅ Applies regex patterns to JavaScript embedded in HTML
+- ✅ Generates URL variations (with/without trailing slashes)
+- ✅ Tests common file extensions (.json, .xml, .html, .txt)
+- ✅ Discovers API version variants (v1, v2, v3)
+- ✅ Tests different format parameters (?format=json, ?format=xml)
+- ✅ Extracts endpoints from .frame files
+
+### Advanced URL Normalization
+
+Hazler uses intelligent URL normalization to:
+- Remove duplicate URLs with different query parameter orders
+- Canonicalize URLs for proper deduplication
+- Generate endpoint variations for thorough testing
+- Handle template variables in URLs (`${id}` → `0`, `{userId}` → `1`)
+
+### Example: Security Audit
+
+Perform a comprehensive security audit of a target:
+
+```bash
+# Deep crawl with aggressive discovery
+hazler https://target.com \
+  --aggressive \
+  -d 5 \
+  -c 20 \
+  -p 10000 \
+  --fields url,status_code,content_type \
+  > endpoints.jsonl
+
+# Extract just the URLs for further testing
+hazler https://target.com --aggressive -o urls > urls.txt
+```
+
+### Example: Find API Endpoints
+
+Discover hidden API endpoints:
+
+```bash
+# Focus on API discovery
+hazler https://api.target.com --aggressive --fields url,links -o json | \
+  jq '.pages[] | select(.url | contains("api")) | .url'
 ```
 
 ## Output Formats
@@ -459,21 +540,25 @@ RUST_LOG=debug cargo run -- https://example.com
 
 ## Roadmap
 
-### Phase 1: MVP (Current) ✅
+### Phase 1: MVP ✅
 - Basic HTTP crawler
 - HTML parsing
 - Concurrent crawling
 - CLI interface
 - JSONL output
 
-### Phase 2: Intelligence (Planned)
-- Priority queue with scoring
-- URL pattern detection
-- Content similarity detection (SimHash)
-- Headless browser support
-- JavaScript endpoint extraction
+### Phase 2: Security Intelligence ✅
+- **JavaScript endpoint extraction** ✅
+- **Advanced URL normalization** ✅
+- **Aggressive discovery mode** ✅
+- **.frame file support** ✅
+- **Regex-based pattern matching** ✅
+- **Template variable replacement** ✅
 
 ### Phase 3: Scale (Planned)
+- Priority queue with scoring
+- Content similarity detection (SimHash)
+- Headless browser support
 - Distributed crawling (Redis)
 - Advanced SPA handling
 - OpenTelemetry integration
@@ -481,6 +566,7 @@ RUST_LOG=debug cargo run -- https://example.com
 - Multiple output formats (HAR, SQLite, GraphML)
 
 ### Phase 4: Polish (Planned)
+- robots.txt respect
 - Comprehensive documentation
 - Binary releases
 - Docker images
@@ -498,7 +584,21 @@ Not yet. This is planned for a future release. Use responsibly and only crawl si
 
 ### Can I crawl JavaScript-heavy sites?
 
-Currently, Hazler only processes static HTML. Support for JavaScript rendering via headless browsers is planned for Phase 2.
+Yes! Hazler now includes JavaScript endpoint discovery that extracts API endpoints from JavaScript code using regex patterns. Use `--aggressive` mode for the most thorough discovery.
+
+### What is aggressive mode?
+
+Aggressive mode (`--aggressive` flag) enables comprehensive endpoint discovery by:
+- Extracting endpoints from JavaScript code
+- Generating URL variations (trailing slashes, extensions)
+- Testing API version variants (v1, v2, v3)
+- Parsing .frame files for endpoint definitions
+
+This is particularly useful for security reconnaissance and bug hunting.
+
+### Does Hazler work with .frame files?
+
+Yes! Hazler automatically detects and parses .frame files to extract endpoint definitions.
 
 ### How do I limit crawling to specific paths?
 
@@ -534,6 +634,8 @@ wait
 - **Monitor resources:** Watch CPU and memory usage
 - **Respect servers:** Don't overwhelm target servers; consider `-c 5` for smaller sites
 - **Use filters:** Process output with `jq` or similar tools to reduce data size
+- **Use aggressive mode wisely:** `--aggressive` generates more requests; use on targets you're authorized to test
+- **Exclude body by default:** Body content is excluded by default for performance; use `--include-body` only when needed
 
 ## License
 

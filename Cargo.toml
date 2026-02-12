@@ -4,6 +4,7 @@ members = [
     "crates/hazler-core",
     "crates/hazler-http",
     "crates/hazler-parser",
+    "crates/hazler-js-parser",
     "crates/hazler-cli",
 ]
 
@@ -33,6 +34,8 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 futures = "0.3"
+regex = "1.10"
+once_cell = "1.19"
 
 [profile.release]
 opt-level = 3

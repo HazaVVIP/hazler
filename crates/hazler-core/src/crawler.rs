@@ -1,8 +1,10 @@
 use crate::config::Config;
+use crate::normalizer::AdvancedUrlNormalizer;
 use crate::queue::UrlQueue;
 use crate::scope::ScopeValidator;
 use crate::types::{CrawlResult, Page};
 use hazler_http::HttpClient;
+use hazler_js_parser::{FrameFileParser, JavaScriptParser};
 use hazler_parser::HtmlParser;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,6 +17,9 @@ pub struct Crawler {
     config: Config,
     http_client: HttpClient,
     parser: HtmlParser,
+    js_parser: JavaScriptParser,
+    frame_parser: FrameFileParser,
+    url_normalizer: AdvancedUrlNormalizer,
 }
 
 impl Crawler {
@@ -23,11 +28,19 @@ impl Crawler {
         let http_client =
             HttpClient::new(&config.user_agent, Duration::from_secs(config.timeout_secs))?;
         let parser = HtmlParser::new();
+        let js_parser = JavaScriptParser::new()
+            .map_err(|e| anyhow::anyhow!("Failed to create JS parser: {}", e))?;
+        let frame_parser = FrameFileParser::new()
+            .map_err(|e| anyhow::anyhow!("Failed to create frame parser: {}", e))?;
+        let url_normalizer = AdvancedUrlNormalizer::new();
 
         Ok(Self {
             config,
             http_client,
             parser,
+            js_parser,
+            frame_parser,
+            url_normalizer,
         })
     }
 
@@ -64,8 +77,12 @@ impl Crawler {
                     let semaphore = Arc::clone(&semaphore);
                     let http_client = self.http_client.clone();
                     let parser = self.parser.clone();
+                    let js_parser = self.js_parser.clone();
+                    let frame_parser = self.frame_parser.clone();
+                    let url_normalizer = self.url_normalizer.clone();
                     let scope_validator = scope_validator.clone();
                     let max_depth = self.config.max_depth;
+                    let aggressive = self.config.aggressive_discovery;
 
                     let task = tokio::spawn(async move {
                         let _permit = semaphore.acquire().await.unwrap();
@@ -74,8 +91,12 @@ impl Crawler {
                             depth,
                             http_client,
                             parser,
+                            js_parser,
+                            frame_parser,
+                            url_normalizer,
                             scope_validator,
                             max_depth,
+                            aggressive,
                         )
                         .await
                     });
@@ -136,24 +157,24 @@ impl Crawler {
         depth: usize,
         http_client: HttpClient,
         parser: HtmlParser,
+        js_parser: JavaScriptParser,
+        frame_parser: FrameFileParser,
+        url_normalizer: AdvancedUrlNormalizer,
         scope_validator: ScopeValidator,
         max_depth: usize,
+        aggressive: bool,
     ) -> anyhow::Result<(Page, Vec<(Url, usize)>)> {
         info!("Crawling: {} (depth: {})", url, depth);
 
         // Fetch the page
         let response = http_client.fetch(&url).await?;
 
-        // Only parse HTML content
-        let should_parse = response
-            .content_type
-            .as_ref()
-            .map(|ct| ct.contains("text/html"))
-            .unwrap_or(false);
-
+        let content_type = response.content_type.as_deref().unwrap_or("");
         let mut links = Vec::new();
-        if should_parse {
-            // Extract links
+
+        // Determine which parser to use based on content type and file extension
+        if content_type.contains("text/html") {
+            // HTML content - use HTML parser
             match parser.extract_links(&response.body, &url) {
                 Ok(extracted_links) => {
                     links = extracted_links;
@@ -162,7 +183,60 @@ impl Crawler {
                     warn!("Failed to parse links from {}: {}", url, e);
                 }
             }
+        } else if content_type.contains("javascript")
+            || content_type.contains("application/json")
+            || url.path().ends_with(".js")
+            || url.path().ends_with(".json")
+        {
+            // JavaScript or JSON content - use JS parser
+            let extracted = js_parser.extract_endpoints(&response.body, &url);
+            info!(
+                "Extracted {} endpoints from JavaScript at {}",
+                extracted.len(),
+                url
+            );
+            links = extracted;
+        } else if url.path().ends_with(".frame") {
+            // Frame file - use frame parser
+            let extracted = frame_parser.extract_endpoints(&response.body, &url);
+            info!(
+                "Extracted {} endpoints from .frame file at {}",
+                extracted.len(),
+                url
+            );
+            links = extracted;
         }
+
+        // If aggressive mode is enabled, also try JS parser on HTML content
+        if aggressive && content_type.contains("text/html") {
+            let js_endpoints = js_parser.extract_endpoints(&response.body, &url);
+            if !js_endpoints.is_empty() {
+                info!(
+                    "Extracted {} additional endpoints from inline JS at {}",
+                    js_endpoints.len(),
+                    url
+                );
+                links.extend(js_endpoints);
+            }
+        }
+
+        // If aggressive mode, generate URL variants
+        if aggressive {
+            let mut variants = Vec::new();
+            for link in &links {
+                variants.extend(url_normalizer.normalize(link));
+                // Also try API variations for API-looking URLs
+                variants.extend(url_normalizer.generate_api_variations(link));
+            }
+            links.extend(variants);
+        }
+
+        // Deduplicate links using canonicalization
+        let mut seen = std::collections::HashSet::new();
+        links.retain(|link| {
+            let canonical = url_normalizer.canonicalize(link);
+            seen.insert(canonical)
+        });
 
         // Create page object
         let mut page = Page::new(url.clone(), response.status_code, response.body, depth);

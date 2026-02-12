@@ -30,8 +30,23 @@ impl OutputFormatter {
             "depth": page.depth,
         });
 
+        // Threshold for warning about large body content (100KB)
+        // TODO: Make this configurable via CLI or env variable
+        const LARGE_BODY_THRESHOLD: usize = 100_000;
+
         if !self.exclude_body {
+            // Warn if body is very large
+            if page.body.len() > LARGE_BODY_THRESHOLD {
+                eprintln!(
+                    "Warning: Large body content for {} ({} bytes)",
+                    page.url,
+                    page.body.len()
+                );
+            }
             data["body"] = json!(page.body);
+        } else {
+            // Include body size instead of full body
+            data["body_size"] = json!(page.body.len());
         }
 
         data["headers"] = json!(page.headers);

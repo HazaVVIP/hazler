@@ -1406,112 +1406,106 @@ hazler https://yoursite.com -o json | jq '.pages | group_by(.depth) | map({depth
 
 ## 6. PRIORITIZED ACTION PLAN
 
-### Phase 1: Critical Fixes (Week 1)
+### Phase 1: Critical Fixes
 
-**Estimated Effort:** 8-12 hours
-
-- [ ] **Add Prerequisites section to README** (2 hours)
+- [ ] **Add Prerequisites section to README**
   - List system dependencies by platform
   - Include Rust installation link
   - Add verification commands
 
-- [ ] **Add Troubleshooting section** (3 hours)
+- [ ] **Add Troubleshooting section**
   - Document build errors and solutions
   - Cover runtime issues
   - Include PATH configuration steps
 
-- [ ] **Add Quick Start guide** (2 hours)
+- [ ] **Add Quick Start guide**
   - First crawl example
   - Common use cases
   - Result processing examples
 
-- [ ] **Create install.sh script** (3 hours)
+- [ ] **Create install.sh script**
   - OS detection
   - Dependency installation
   - Rust check/install
   - Build and install
 
-- [ ] **Test installation on clean systems** (2 hours)
+- [ ] **Test installation on clean systems**
   - Fresh Ubuntu VM
   - Fresh macOS (if available)
   - Document any issues
 
-### Phase 2: High Priority Improvements (Week 2-3)
+### Phase 2: High Priority Improvements
 
-**Estimated Effort:** 16-24 hours
-
-- [ ] **Implement output filtering** (6 hours)
+- [ ] **Implement output filtering**
   - `--exclude-body` flag
   - `--fields` selection
   - Update tests
 
-- [ ] **Add new output formats** (8 hours)
+- [ ] **Add new output formats**
   - `--format urls` (simple list)
   - `--format csv` 
   - `--format tree` (site structure)
   - Tests for each format
 
-- [ ] **Add performance metrics** (4 hours)
+- [ ] **Add performance metrics**
   - Track stats during crawl
   - `--stats` flag for display
   - Include in summary output
 
-- [ ] **Create Docker image** (4 hours)
+- [ ] **Create Docker image**
   - Write Dockerfile
   - Set up GitHub Actions for building
   - Push to ghcr.io
   - Document usage
 
-- [ ] **Set up GitHub Releases** (3 hours)
+- [ ] **Set up GitHub Releases**
   - Create release workflow
   - Build binaries for Linux/macOS/Windows
   - Generate checksums
   - Update README with download links
 
-### Phase 3: Polish & Enhancement (Week 4+)
+### Phase 3: Polish & Enhancement
 
-**Estimated Effort:** 20-30 hours
-
-- [ ] **Publish to crates.io** (2 hours)
+- [ ] **Publish to crates.io**
   - Update Cargo.toml metadata
   - Test publish
   - Official release
 
-- [ ] **Add progress indicators** (4 hours)
+- [ ] **Add progress indicators**
   - Real-time progress bar
   - ETA calculation
   - Current status display
 
-- [ ] **Add summary report** (6 hours)
+- [ ] **Add summary report**
   - `--report` flag
   - Statistics calculation
   - Issue detection
   - Formatted output
 
-- [ ] **Performance benchmarking suite** (6 hours)
+- [ ] **Performance benchmarking suite**
   - Create test fixtures
   - Automated benchmarks
   - Performance regression detection
   - Document baseline performance
 
-- [ ] **Comprehensive API documentation** (4 hours)
+- [ ] **Comprehensive API documentation**
   - Generate rustdoc
   - Add more doc comments
   - Create docs site
   - Link from README
 
-- [ ] **Create CONTRIBUTING.md** (2 hours)
+- [ ] **Create CONTRIBUTING.md**
   - Development setup
   - Code style guidelines
   - PR process
   - Testing requirements
 
-- [ ] **Add FAQ section** (2 hours)
+- [ ] **Add FAQ section**
   - Common questions
   - Troubleshooting cross-reference
   - Best practices
 
-- [ ] **Enhanced examples** (4 hours)
+- [ ] **Enhanced examples**
   - Real-world scenarios
   - Integration examples
   - Advanced workflows

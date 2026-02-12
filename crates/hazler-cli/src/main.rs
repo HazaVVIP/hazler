@@ -60,6 +60,14 @@ struct Args {
     /// Verbose output
     #[arg(short = 'v', long)]
     verbose: bool,
+
+    /// Enable aggressive endpoint discovery mode
+    /// - Applies regex patterns to JavaScript files
+    /// - Generates URL variations
+    /// - Discovers API endpoints more thoroughly
+    /// Warning: This may generate more requests
+    #[arg(long)]
+    aggressive: bool,
 }
 
 #[tokio::main]
@@ -92,7 +100,8 @@ async fn main() {
         .concurrency(args.concurrency)
         .max_pages(args.max_pages)
         .user_agent(args.user_agent)
-        .timeout_secs(args.timeout);
+        .timeout_secs(args.timeout)
+        .aggressive(args.aggressive);
 
     // Create and run crawler
     let crawler = match Crawler::new(config) {

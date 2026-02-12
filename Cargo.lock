@@ -581,6 +581,7 @@ dependencies = [
  "anyhow",
  "futures",
  "hazler-http",
+ "hazler-js-parser",
  "hazler-parser",
  "serde",
  "serde_json",

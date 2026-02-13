@@ -91,16 +91,12 @@ impl HttpClient {
                 self.max_body_size
             );
             // Truncate at byte boundary, ensuring valid UTF-8
-            let truncated = if self.max_body_size < body.len() {
-                // Find the last valid UTF-8 character boundary at or before max_body_size
-                let mut truncate_at = self.max_body_size;
-                while truncate_at > 0 && !body.is_char_boundary(truncate_at) {
-                    truncate_at -= 1;
-                }
-                &body[..truncate_at]
-            } else {
-                &body[..]
-            };
+            // Find the last valid UTF-8 character boundary at or before max_body_size
+            let mut truncate_at = self.max_body_size;
+            while truncate_at > 0 && !body.is_char_boundary(truncate_at) {
+                truncate_at -= 1;
+            }
+            let truncated = &body[..truncate_at];
             
             return Ok(HttpResponse {
                 url: url.clone(),

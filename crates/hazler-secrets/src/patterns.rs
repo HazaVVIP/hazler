@@ -226,7 +226,7 @@ pub static SECRET_PATTERNS: Lazy<Vec<SecretPattern>> = Lazy::new(|| {
             name: "Email Address",
             pattern: r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
             severity: "low",
-            description: "Email address found (potential internal exposure)",
+            description: "Email address found (potential contact information)",
         },
         // Config Files
         SecretPattern {

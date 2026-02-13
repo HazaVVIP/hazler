@@ -4,10 +4,14 @@ use std::time::Duration;
 use tracing::{debug, warn};
 use url::Url;
 
+/// Maximum response body size in bytes (10 MB)
+const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
+
 /// HTTP client wrapper for making requests
 #[derive(Clone)]
 pub struct HttpClient {
     client: Client,
+    max_body_size: usize,
 }
 
 impl HttpClient {
@@ -20,7 +24,10 @@ impl HttpClient {
             .build()
             .map_err(Error::RequestFailed)?;
 
-        Ok(Self { client })
+        Ok(Self {
+            client,
+            max_body_size: MAX_BODY_SIZE,
+        })
     }
 
     /// Create a default HTTP client
@@ -41,7 +48,10 @@ impl HttpClient {
         let headers = response
             .headers()
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or_default().to_string()))
+            .map(|(k, v)| {
+                let value = v.to_str().unwrap_or("[non-UTF8 header value]");
+                (k.to_string(), value.to_string())
+            })
             .collect();
 
         let content_type = response
@@ -50,7 +60,48 @@ impl HttpClient {
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 
+        // Check content length before downloading
+        if let Some(content_length) = response.content_length() {
+            if content_length as usize > self.max_body_size {
+                warn!(
+                    "Response from {} exceeds max body size ({} > {} bytes), truncating",
+                    url, content_length, self.max_body_size
+                );
+                return Ok(HttpResponse {
+                    url: url.clone(),
+                    status_code,
+                    headers,
+                    content_type,
+                    body: format!(
+                        "[Response body too large: {} bytes, max {} bytes]",
+                        content_length, self.max_body_size
+                    ),
+                });
+            }
+        }
+
         let body = response.text().await.map_err(Error::RequestFailed)?;
+
+        // Double-check after download (in case Content-Length was missing)
+        if body.len() > self.max_body_size {
+            warn!(
+                "Response from {} exceeds max body size ({} > {} bytes), truncating",
+                url,
+                body.len(),
+                self.max_body_size
+            );
+            let truncated_body = body.chars().take(self.max_body_size).collect::<String>();
+            return Ok(HttpResponse {
+                url: url.clone(),
+                status_code,
+                headers,
+                content_type,
+                body: format!(
+                    "{}[... truncated at {} bytes]",
+                    truncated_body, self.max_body_size
+                ),
+            });
+        }
 
         debug!(
             "Fetched {} - status: {}, size: {} bytes",

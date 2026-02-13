@@ -125,7 +125,13 @@ impl Crawler {
                     let noise_filter = Arc::clone(&noise_filter);
 
                     let task = tokio::spawn(async move {
-                        let _permit = semaphore.acquire().await.unwrap();
+                        let _permit = match semaphore.acquire().await {
+                            Ok(permit) => permit,
+                            Err(e) => {
+                                error!("Failed to acquire semaphore: {}", e);
+                                return Err(anyhow::anyhow!("Semaphore acquisition failed: {}", e));
+                            }
+                        };
                         let context = CrawlPageContext {
                             http_client,
                             parser,
@@ -228,8 +234,14 @@ impl Crawler {
         // Check if this response pattern is noise (WAF blocks, etc.)
         let content_length = response.body.len();
         let should_filter = {
-            let mut filter = context.noise_filter.lock().unwrap();
-            filter.should_filter(response.status_code, content_length)
+            let filter_result = context.noise_filter.lock();
+            match filter_result {
+                Ok(mut filter) => filter.should_filter(response.status_code, content_length),
+                Err(e) => {
+                    warn!("Noise filter mutex poisoned: {}, disabling filter", e);
+                    false // Continue without filtering if mutex is poisoned
+                }
+            }
         };
 
         if should_filter {

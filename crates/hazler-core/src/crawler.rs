@@ -79,8 +79,10 @@ impl Crawler {
         // Configure scope validator based on config settings
         let mut scope_validator = ScopeValidator::new(&start_url);
         
-        // If strict_domain is enabled, do not allow subdomains
-        // If allow_subdomains is enabled (and not strict), allow subdomains
+        // Configure scope behavior:
+        // - If strict_domain is enabled: only exact domain (no subdomains)
+        // - Otherwise, if allow_subdomains is enabled: include subdomains
+        // - Default: only exact domain (allow_subdomains=false)
         if !self.config.strict_domain && self.config.allow_subdomains {
             scope_validator = scope_validator.allow_subdomains(true);
         }

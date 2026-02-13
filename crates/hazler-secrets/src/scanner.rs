@@ -314,8 +314,8 @@ mod tests {
         let minified = format!(r#"const a="{}",b="{}",c="{}";"#, aws_test, gh_test, stripe_test);
         let findings = scanner.scan(&minified, "minified.js");
 
-        // Should find all 3 secrets (AWS key, GitHub token, Stripe key)
-        assert!(findings.len() >= 3, "Expected at least 3 findings, got {}", findings.len());
+        // Should find exactly 3 secrets (AWS key, GitHub token, Stripe key)
+        assert_eq!(findings.len(), 3, "Expected exactly 3 findings, got {}", findings.len());
         
         // Verify each secret type is found
         assert!(findings.iter().any(|f| f.secret_type.contains("AWS")));
@@ -327,10 +327,11 @@ mod tests {
     fn test_secrets_with_quotes() {
         let scanner = SecretScanner::new();
         // Test secrets surrounded by quotes (common in minified code)
-        let code = r#"apiKey:"AKIA1234567890ABCDEF",token:'ghp_1234567890abcdefABCDEF1234567890ab'"#;
+        // Use variable names that won't trigger additional patterns
+        let code = r#"const a="AKIA1234567890ABCDEF",b='ghp_1234567890abcdefABCDEF1234567890ab'"#;
         let findings = scanner.scan(code, "test.js");
 
-        // Should find secrets even when surrounded by quotes
+        // Should find at least AWS and GitHub tokens (may find more generic patterns)
         assert!(findings.len() >= 2, "Expected at least 2 findings, got {}", findings.len());
         assert!(findings.iter().any(|f| f.secret_type.contains("AWS")));
         assert!(findings.iter().any(|f| f.secret_type.contains("GitHub")));
@@ -343,8 +344,8 @@ mod tests {
         let html = r#"<script>var k="AKIA1234567890ABCDEF";fetch("/api",{headers:{"Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}})</script>"#;
         let findings = scanner.scan(html, "minified.html");
 
-        // Should find AWS key and JWT token
-        assert!(findings.len() >= 2, "Expected at least 2 findings in minified HTML");
+        // Should find exactly AWS key and JWT token
+        assert_eq!(findings.len(), 2, "Expected exactly 2 findings in minified HTML");
         assert!(findings.iter().any(|f| f.secret_type.contains("AWS")));
         assert!(findings.iter().any(|f| f.secret_type.contains("JWT")));
     }

@@ -7,6 +7,9 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+/// Maximum number of endpoints to display in HTML report
+const MAX_DISPLAYED_ENDPOINTS: usize = 100;
+
 /// Generate an HTML report from crawl results
 pub fn generate_html_report(result: &CrawlResult, output_path: &Path) -> anyhow::Result<()> {
     let html = build_html_report(result);
@@ -41,9 +44,6 @@ fn build_html_report(result: &CrawlResult) -> String {
             }
         }
     }
-    
-    // Note: status_codes calculation available for future use
-    let _status_codes = calculate_status_distribution(result);
     
     format!(
         r#"<!DOCTYPE html>
@@ -479,7 +479,7 @@ fn build_endpoints_section(result: &CrawlResult) -> String {
     );
     
     for (i, link) in all_links.iter().enumerate() {
-        if i < 100 { // Limit to first 100 to avoid huge reports
+        if i < MAX_DISPLAYED_ENDPOINTS {
             html.push_str(&format!(
                 r#"<li class="endpoint-item">{}</li>"#,
                 html_escape(link)
@@ -487,28 +487,15 @@ fn build_endpoints_section(result: &CrawlResult) -> String {
         }
     }
     
-    if all_links.len() > 100 {
+    if all_links.len() > MAX_DISPLAYED_ENDPOINTS {
         html.push_str(&format!(
             r#"<li class="endpoint-item"><em>... and {} more endpoints</em></li>"#,
-            all_links.len() - 100
+            all_links.len() - MAX_DISPLAYED_ENDPOINTS
         ));
     }
     
     html.push_str("</ul>");
     html
-}
-
-/// Calculate status code distribution
-fn calculate_status_distribution(result: &CrawlResult) -> Vec<(u16, usize)> {
-    let mut counts: std::collections::HashMap<u16, usize> = std::collections::HashMap::new();
-    
-    for page in &result.pages {
-        *counts.entry(page.status_code).or_insert(0) += 1;
-    }
-    
-    let mut distribution: Vec<(u16, usize)> = counts.into_iter().collect();
-    distribution.sort_by_key(|(code, _)| *code);
-    distribution
 }
 
 /// HTML escape utility

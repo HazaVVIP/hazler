@@ -3,11 +3,12 @@ use crate::normalizer::AdvancedUrlNormalizer;
 use crate::queue::UrlQueue;
 use crate::scope::ScopeValidator;
 use crate::types::{CrawlResult, Finding, FindingStats, Page, Severity};
+use crate::noise_filter::NoiseFilter;
 use hazler_http::HttpClient;
 use hazler_js_parser::{FrameFileParser, JavaScriptParser};
 use hazler_parser::HtmlParser;
 use hazler_secrets::SecretScanner;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
@@ -24,6 +25,7 @@ struct CrawlPageContext {
     max_depth: usize,
     aggressive: bool,
     secret_scanner: Option<SecretScanner>,
+    noise_filter: Arc<Mutex<NoiseFilter>>,
 }
 
 /// Main crawler implementation
@@ -83,6 +85,9 @@ impl Crawler {
             scope_validator = scope_validator.allow_subdomains(true);
         }
 
+        // Create noise filter for smart rate limiting
+        let noise_filter = Arc::new(Mutex::new(NoiseFilter::with_threshold(5)));
+
         // Add the starting URL
         queue.push(start_url.clone(), 0);
 
@@ -115,6 +120,7 @@ impl Crawler {
                     let max_depth = self.config.max_depth;
                     let aggressive = self.config.aggressive_discovery;
                     let secret_scanner = self.secret_scanner.clone();
+                    let noise_filter = Arc::clone(&noise_filter);
 
                     let task = tokio::spawn(async move {
                         let _permit = semaphore.acquire().await.unwrap();
@@ -128,6 +134,7 @@ impl Crawler {
                             max_depth,
                             aggressive,
                             secret_scanner,
+                            noise_filter,
                         };
                         Self::crawl_page(url, depth, context).await
                     });
@@ -215,6 +222,23 @@ impl Crawler {
 
         // Fetch the page
         let response = context.http_client.fetch(&url).await?;
+
+        // Check if this response pattern is noise (WAF blocks, etc.)
+        let content_length = response.body.len();
+        let should_filter = {
+            let mut filter = context.noise_filter.lock().unwrap();
+            filter.should_filter(response.status_code, content_length)
+        };
+
+        if should_filter {
+            warn!(
+                "Filtering response from {} (status: {}, length: {}) as noise",
+                url, response.status_code, content_length
+            );
+            // Return early with empty page and no new URLs
+            let page = Page::new(url.clone(), response.status_code, String::new(), depth);
+            return Ok((page, Vec::new()));
+        }
 
         let content_type = response.content_type.as_deref().unwrap_or("");
         let mut links = Vec::new();

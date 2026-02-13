@@ -17,6 +17,14 @@ pub enum Framework {
     Unknown,
 }
 
+/// Helper function to compile regex patterns safely
+/// Panics only during initialization if patterns are invalid (fail-fast on startup)
+fn compile_regex(pattern: &str) -> Regex {
+    Regex::new(pattern).unwrap_or_else(|e| {
+        panic!("Invalid regex pattern '{}': {}", pattern, e);
+    })
+}
+
 /// Framework detection patterns
 pub static FRAMEWORK_PATTERNS: Lazy<Vec<(Framework, Vec<Regex>)>> = Lazy::new(|| {
     vec![
@@ -24,76 +32,76 @@ pub static FRAMEWORK_PATTERNS: Lazy<Vec<(Framework, Vec<Regex>)>> = Lazy::new(||
         (
             Framework::React,
             vec![
-                Regex::new(r"react\.").unwrap(),
-                Regex::new(r"React\.").unwrap(),
-                Regex::new(r"from\s+['\x22]react['\x22]").unwrap(),
-                Regex::new(r"ReactDOM").unwrap(),
-                Regex::new(r"useState|useEffect|useContext").unwrap(),
-                Regex::new(r"__webpack_require__.*react").unwrap(),
+                compile_regex(r"react\."),
+                compile_regex(r"React\."),
+                compile_regex(r"from\s+['\x22]react['\x22]"),
+                compile_regex(r"ReactDOM"),
+                compile_regex(r"useState|useEffect|useContext"),
+                compile_regex(r"__webpack_require__.*react"),
             ],
         ),
         // Next.js patterns
         (
             Framework::NextJs,
             vec![
-                Regex::new(r"next/").unwrap(),
-                Regex::new(r"_next/static/").unwrap(),
-                Regex::new(r"__NEXT_DATA__").unwrap(),
-                Regex::new(r"next\.config").unwrap(),
+                compile_regex(r"next/"),
+                compile_regex(r"_next/static/"),
+                compile_regex(r"__NEXT_DATA__"),
+                compile_regex(r"next\.config"),
             ],
         ),
         // Angular patterns
         (
             Framework::Angular,
             vec![
-                Regex::new(r"@angular/").unwrap(),
-                Regex::new(r"angular\.").unwrap(),
-                Regex::new(r"ng-").unwrap(),
-                Regex::new(r"platformBrowserDynamic").unwrap(),
-                Regex::new(r"NgModule").unwrap(),
+                compile_regex(r"@angular/"),
+                compile_regex(r"angular\."),
+                compile_regex(r"ng-"),
+                compile_regex(r"platformBrowserDynamic"),
+                compile_regex(r"NgModule"),
             ],
         ),
         // Vue.js patterns
         (
             Framework::Vue,
             vec![
-                Regex::new(r"vue\.").unwrap(),
-                Regex::new(r"Vue\.").unwrap(),
-                Regex::new(r"from\s+['\x22]vue['\x22]").unwrap(),
-                Regex::new(r"createApp|Vue\.component").unwrap(),
-                Regex::new(r"v-if|v-for|v-model").unwrap(),
+                compile_regex(r"vue\."),
+                compile_regex(r"Vue\."),
+                compile_regex(r"from\s+['\x22]vue['\x22]"),
+                compile_regex(r"createApp|Vue\.component"),
+                compile_regex(r"v-if|v-for|v-model"),
             ],
         ),
         // Nuxt patterns
         (
             Framework::Nuxt,
             vec![
-                Regex::new(r"nuxt").unwrap(),
-                Regex::new(r"__NUXT__").unwrap(),
+                compile_regex(r"nuxt"),
+                compile_regex(r"__NUXT__"),
             ],
         ),
         // Svelte patterns
         (
             Framework::Svelte,
             vec![
-                Regex::new(r"svelte").unwrap(),
-                Regex::new(r"SvelteComponent").unwrap(),
+                compile_regex(r"svelte"),
+                compile_regex(r"SvelteComponent"),
             ],
         ),
         // Ember patterns
         (
             Framework::Ember,
             vec![
-                Regex::new(r"Ember\.").unwrap(),
-                Regex::new(r"ember-").unwrap(),
+                compile_regex(r"Ember\."),
+                compile_regex(r"ember-"),
             ],
         ),
         // Backbone patterns
         (
             Framework::Backbone,
             vec![
-                Regex::new(r"Backbone\.").unwrap(),
-                Regex::new(r"backbone").unwrap(),
+                compile_regex(r"Backbone\."),
+                compile_regex(r"backbone"),
             ],
         ),
     ]

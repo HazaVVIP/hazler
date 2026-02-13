@@ -1,7 +1,7 @@
+use colored::*;
 use hazler_core::{CrawlResult, Page, Severity};
 use serde_json::json;
 use std::collections::HashMap;
-use colored::*;
 
 /// Color options for output formatting
 #[derive(Debug, Clone, Copy)]
@@ -157,7 +157,10 @@ impl OutputFormatter {
 
         // Add a nice header
         output.push_str(&format!("\n{}\n", "═".repeat(80).bright_blue()));
-        output.push_str(&format!("{}\n", "🌐 HAZLER CRAWL RESULTS".bright_cyan().bold()));
+        output.push_str(&format!(
+            "{}\n",
+            "🌐 HAZLER CRAWL RESULTS".bright_cyan().bold()
+        ));
         output.push_str(&format!("{}\n\n", "═".repeat(80).bright_blue()));
 
         // Group pages by depth
@@ -182,7 +185,9 @@ impl OutputFormatter {
 
                     // Show secrets indicator if any found
                     let secrets_indicator = if !page.secrets.is_empty() {
-                        format!(" 🔒 {} secrets", page.secrets.len()).bright_red().to_string()
+                        format!(" 🔒 {} secrets", page.secrets.len())
+                            .bright_red()
+                            .to_string()
                     } else {
                         String::new()
                     };
@@ -228,9 +233,19 @@ pub fn generate_stats(result: &CrawlResult) -> String {
     output.push_str(&format!("{}\n", "📊 CRAWL STATISTICS".bright_cyan().bold()));
     output.push_str(&format!("{}\n\n", "═".repeat(80).bright_blue()));
 
-    output.push_str(&format!("{} {}\n", "Total pages crawled:".bright_white(), result.total_pages.to_string().green().bold()));
-    output.push_str(&format!("{} {}\n", "Total URLs discovered:".bright_white(), result.total_urls.to_string().cyan().bold()));
-    output.push_str(&format!("{} {}\n", "Errors encountered:".bright_white(), 
+    output.push_str(&format!(
+        "{} {}\n",
+        "Total pages crawled:".bright_white(),
+        result.total_pages.to_string().green().bold()
+    ));
+    output.push_str(&format!(
+        "{} {}\n",
+        "Total URLs discovered:".bright_white(),
+        result.total_urls.to_string().cyan().bold()
+    ));
+    output.push_str(&format!(
+        "{} {}\n",
+        "Errors encountered:".bright_white(),
         if !result.errors.is_empty() {
             result.errors.len().to_string().red().bold()
         } else {
@@ -244,7 +259,10 @@ pub fn generate_stats(result: &CrawlResult) -> String {
         *status_codes.entry(page.status_code).or_insert(0) += 1;
     }
 
-    output.push_str(&format!("\n{}\n", "Status Code Distribution:".yellow().bold()));
+    output.push_str(&format!(
+        "\n{}\n",
+        "Status Code Distribution:".yellow().bold()
+    ));
     let mut codes: Vec<_> = status_codes.iter().collect();
     codes.sort_by_key(|(code, _)| *code);
     for (code, count) in codes {
@@ -269,7 +287,11 @@ pub fn generate_stats(result: &CrawlResult) -> String {
     let mut depth_list: Vec<_> = depths.iter().collect();
     depth_list.sort_by_key(|(depth, _)| *depth);
     for (depth, count) in depth_list {
-        output.push_str(&format!("  {}: {} pages\n", format!("Depth {}", depth).cyan(), count));
+        output.push_str(&format!(
+            "  {}: {} pages\n",
+            format!("Depth {}", depth).cyan(),
+            count
+        ));
     }
 
     // Content type distribution
@@ -282,7 +304,10 @@ pub fn generate_stats(result: &CrawlResult) -> String {
         *content_types.entry(ct).or_insert(0) += 1;
     }
 
-    output.push_str(&format!("\n{}\n", "Content Type Distribution:".yellow().bold()));
+    output.push_str(&format!(
+        "\n{}\n",
+        "Content Type Distribution:".yellow().bold()
+    ));
     let mut ct_list: Vec<_> = content_types.iter().collect();
     ct_list.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
     for (ct, count) in ct_list.iter().take(10) {
@@ -404,7 +429,7 @@ pub fn generate_report(result: &CrawlResult) -> String {
         if stats.total > 0 {
             output.push_str("\n=== 🔒 SECURITY FINDINGS ===\n");
             output.push_str(&format!("\nTotal secrets found: {}\n", stats.total));
-            
+
             if stats.critical > 0 {
                 output.push_str(&format!("  🔴 Critical: {}\n", stats.critical));
             }
@@ -447,7 +472,10 @@ pub fn generate_report(result: &CrawlResult) -> String {
                     ));
                 }
                 if critical_findings.len() > 10 {
-                    output.push_str(&format!("  ... and {} more critical findings\n", critical_findings.len() - 10));
+                    output.push_str(&format!(
+                        "  ... and {} more critical findings\n",
+                        critical_findings.len() - 10
+                    ));
                 }
             }
 
@@ -465,7 +493,10 @@ pub fn generate_report(result: &CrawlResult) -> String {
                     ));
                 }
                 if high_findings.len() > 5 {
-                    output.push_str(&format!("  ... and {} more high severity findings\n", high_findings.len() - 5));
+                    output.push_str(&format!(
+                        "  ... and {} more high severity findings\n",
+                        high_findings.len() - 5
+                    ));
                 }
             }
 

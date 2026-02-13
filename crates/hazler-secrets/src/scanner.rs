@@ -76,7 +76,8 @@ impl SecretScanner {
 
         for (line_idx, line) in lines.iter().enumerate() {
             for (name, pattern, severity, description) in &self.patterns {
-                if let Some(captures) = pattern.captures(line) {
+                // Use captures_iter for global search to find all matches in minified code
+                for captures in pattern.captures_iter(line) {
                     let matched = captures.get(0).unwrap();
                     let matched_text = matched.as_str();
 
@@ -301,5 +302,50 @@ mod tests {
         assert_eq!(stats.critical, 1);
         assert_eq!(stats.high, 1);
         assert_eq!(stats.low, 1);
+    }
+
+    #[test]
+    fn test_minified_code_multiple_secrets() {
+        let scanner = SecretScanner::new();
+        // Minified JavaScript with multiple secrets on one line (test values)
+        let aws_test = "AKIA1234567890ABCDEF";
+        let gh_test = "ghp_1234567890abcdefABCDEF1234567890ab";
+        let stripe_test = format!("sk_live_{}", "12345678901234567890abcd");
+        let minified = format!(r#"const a="{}",b="{}",c="{}";"#, aws_test, gh_test, stripe_test);
+        let findings = scanner.scan(&minified, "minified.js");
+
+        // Should find all 3 secrets (AWS key, GitHub token, Stripe key)
+        assert!(findings.len() >= 3, "Expected at least 3 findings, got {}", findings.len());
+        
+        // Verify each secret type is found
+        assert!(findings.iter().any(|f| f.secret_type.contains("AWS")));
+        assert!(findings.iter().any(|f| f.secret_type.contains("GitHub")));
+        assert!(findings.iter().any(|f| f.secret_type.contains("Stripe")));
+    }
+
+    #[test]
+    fn test_secrets_with_quotes() {
+        let scanner = SecretScanner::new();
+        // Test secrets surrounded by quotes (common in minified code)
+        let code = r#"apiKey:"AKIA1234567890ABCDEF",token:'ghp_1234567890abcdefABCDEF1234567890ab'"#;
+        let findings = scanner.scan(code, "test.js");
+
+        // Should find secrets even when surrounded by quotes
+        assert!(findings.len() >= 2, "Expected at least 2 findings, got {}", findings.len());
+        assert!(findings.iter().any(|f| f.secret_type.contains("AWS")));
+        assert!(findings.iter().any(|f| f.secret_type.contains("GitHub")));
+    }
+
+    #[test]
+    fn test_minified_html_with_secrets() {
+        let scanner = SecretScanner::new();
+        // Minified HTML with inline JavaScript containing secrets
+        let html = r#"<script>var k="AKIA1234567890ABCDEF";fetch("/api",{headers:{"Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}})</script>"#;
+        let findings = scanner.scan(html, "minified.html");
+
+        // Should find AWS key and JWT token
+        assert!(findings.len() >= 2, "Expected at least 2 findings in minified HTML");
+        assert!(findings.iter().any(|f| f.secret_type.contains("AWS")));
+        assert!(findings.iter().any(|f| f.secret_type.contains("JWT")));
     }
 }

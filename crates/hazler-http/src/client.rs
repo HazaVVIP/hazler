@@ -97,7 +97,7 @@ impl HttpClient {
                 truncate_at -= 1;
             }
             let truncated = &body[..truncate_at];
-            
+
             return Ok(HttpResponse {
                 url: url.clone(),
                 status_code,

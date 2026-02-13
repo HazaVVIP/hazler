@@ -75,34 +75,22 @@ pub static FRAMEWORK_PATTERNS: Lazy<Vec<(Framework, Vec<Regex>)>> = Lazy::new(||
         // Nuxt patterns
         (
             Framework::Nuxt,
-            vec![
-                compile_regex(r"nuxt"),
-                compile_regex(r"__NUXT__"),
-            ],
+            vec![compile_regex(r"nuxt"), compile_regex(r"__NUXT__")],
         ),
         // Svelte patterns
         (
             Framework::Svelte,
-            vec![
-                compile_regex(r"svelte"),
-                compile_regex(r"SvelteComponent"),
-            ],
+            vec![compile_regex(r"svelte"), compile_regex(r"SvelteComponent")],
         ),
         // Ember patterns
         (
             Framework::Ember,
-            vec![
-                compile_regex(r"Ember\."),
-                compile_regex(r"ember-"),
-            ],
+            vec![compile_regex(r"Ember\."), compile_regex(r"ember-")],
         ),
         // Backbone patterns
         (
             Framework::Backbone,
-            vec![
-                compile_regex(r"Backbone\."),
-                compile_regex(r"backbone"),
-            ],
+            vec![compile_regex(r"Backbone\."), compile_regex(r"backbone")],
         ),
     ]
 });

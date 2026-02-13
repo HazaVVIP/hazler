@@ -164,30 +164,11 @@ impl OutputFormatter {
             if let Some(pages) = by_depth.get(&depth) {
                 for page in pages {
                     let indent = "  ".repeat(depth);
-                    let (status_indicator, status_color) = match page.status_code {
-                        200..=299 => ("✓", "green"),
-                        300..=399 => ("↻", "yellow"),
-                        400..=499 => ("✗", "red"),
-                        500..=599 => ("⚠", "bright_red"),
-                        _ => ("?", "white"),
-                    };
+                    let (status_indicator, status_color) = get_status_indicator(page.status_code);
 
                     let status_str = format!("[{}]", page.status_code);
-                    let colored_status = match status_color {
-                        "green" => status_str.green(),
-                        "yellow" => status_str.yellow(),
-                        "red" => status_str.red(),
-                        "bright_red" => status_str.bright_red(),
-                        _ => status_str.white(),
-                    };
-
-                    let indicator_colored = match status_color {
-                        "green" => status_indicator.green(),
-                        "yellow" => status_indicator.yellow(),
-                        "red" => status_indicator.red(),
-                        "bright_red" => status_indicator.bright_red(),
-                        _ => status_indicator.white(),
-                    };
+                    let colored_status = apply_color(&status_str, status_color);
+                    let indicator_colored = apply_color(status_indicator, status_color);
 
                     // Show secrets indicator if any found
                     let secrets_indicator = if !page.secrets.is_empty() {
@@ -491,5 +472,27 @@ fn truncate_string(s: &str, max_len: usize) -> String {
         s.to_string()
     } else {
         format!("{}...", &s[..max_len])
+    }
+}
+
+/// Get status indicator and color name for a given HTTP status code
+fn get_status_indicator(status_code: u16) -> (&'static str, &'static str) {
+    match status_code {
+        200..=299 => ("✓", "green"),
+        300..=399 => ("↻", "yellow"),
+        400..=499 => ("✗", "red"),
+        500..=599 => ("⚠", "bright_red"),
+        _ => ("?", "white"),
+    }
+}
+
+/// Apply color to a string based on color name
+fn apply_color(text: &str, color: &str) -> colored::ColoredString {
+    match color {
+        "green" => text.green(),
+        "yellow" => text.yellow(),
+        "red" => text.red(),
+        "bright_red" => text.bright_red(),
+        _ => text.white(),
     }
 }

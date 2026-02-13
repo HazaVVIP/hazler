@@ -231,7 +231,7 @@ pub fn generate_stats(result: &CrawlResult) -> String {
     output.push_str(&format!("{} {}\n", "Total pages crawled:".bright_white(), result.total_pages.to_string().green().bold()));
     output.push_str(&format!("{} {}\n", "Total URLs discovered:".bright_white(), result.total_urls.to_string().cyan().bold()));
     output.push_str(&format!("{} {}\n", "Errors encountered:".bright_white(), 
-        if result.errors.len() > 0 {
+        if !result.errors.is_empty() {
             result.errors.len().to_string().red().bold()
         } else {
             result.errors.len().to_string().green().bold()

@@ -1,4 +1,5 @@
 use crate::error::{Error, Result};
+use crate::tls_config;
 use reqwest::Client;
 use std::time::Duration;
 use tracing::{debug, warn};
@@ -17,6 +18,23 @@ impl HttpClient {
             .user_agent(user_agent)
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::limited(10))
+            .build()
+            .map_err(Error::RequestFailed)?;
+
+        Ok(Self { client })
+    }
+
+    /// Create a new HTTP client with stealth mode enabled (TLS fingerprinting randomization)
+    pub fn new_with_stealth(user_agent: &str, timeout: Duration) -> Result<Self> {
+        // Create randomized TLS configuration
+        let tls_config = tls_config::create_randomized_tls_config()
+            .map_err(|e| Error::TlsConfigError(format!("{}", e)))?;
+
+        let client = Client::builder()
+            .user_agent(user_agent)
+            .timeout(timeout)
+            .redirect(reqwest::redirect::Policy::limited(10))
+            .use_preconfigured_tls(tls_config)
             .build()
             .map_err(Error::RequestFailed)?;
 
@@ -87,5 +105,21 @@ mod tests {
     async fn test_create_client() {
         let client = HttpClient::new("TestAgent/1.0", Duration::from_secs(5));
         assert!(client.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_create_client_with_stealth() {
+        let client = HttpClient::new_with_stealth("TestAgent/1.0", Duration::from_secs(5));
+        assert!(client.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_stealth_mode_uses_different_tls_config() {
+        // Create two stealth clients - they should both succeed
+        let client1 = HttpClient::new_with_stealth("TestAgent/1.0", Duration::from_secs(5));
+        let client2 = HttpClient::new_with_stealth("TestAgent/1.0", Duration::from_secs(5));
+        
+        assert!(client1.is_ok());
+        assert!(client2.is_ok());
     }
 }

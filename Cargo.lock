@@ -583,6 +583,7 @@ dependencies = [
  "hazler-http",
  "hazler-js-parser",
  "hazler-parser",
+ "hazler-secrets",
  "serde",
  "serde_json",
  "thiserror",
@@ -623,6 +624,17 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "hazler-secrets"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

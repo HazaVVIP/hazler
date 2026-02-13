@@ -69,6 +69,29 @@ struct Args {
     /// Warning: This may generate more requests
     #[arg(long)]
     aggressive: bool,
+
+    /// Enable comprehensive scanning mode (--all)
+    /// Activates all analysis features:
+    /// - Deep crawling with increased limits
+    /// - JavaScript endpoint extraction
+    /// - Secret and sensitive data scanning
+    /// - Framework detection
+    /// - API endpoint mapping
+    /// - Comprehensive reporting
+    #[arg(long)]
+    all: bool,
+
+    /// Enable stealth mode to evade WAF detection
+    /// - Randomizes request patterns
+    /// - Implements adaptive rate limiting
+    /// - Maintains session state
+    /// - Uses realistic browser headers
+    #[arg(long)]
+    stealth: bool,
+
+    /// Proxy URL (e.g., socks5://localhost:1080, http://proxy:8080)
+    #[arg(long)]
+    proxy: Option<String>,
 }
 
 #[tokio::main]
@@ -95,14 +118,39 @@ async fn main() {
         }
     };
 
+    // Apply --all mode defaults if enabled
+    let (max_depth, max_pages, aggressive, enable_secrets, enable_stealth) = if args.all {
+        // --all mode: comprehensive scanning
+        let depth = if args.max_depth == 3 { 5 } else { args.max_depth }; // Increase depth if using default
+        let pages = if args.max_pages == 0 { 0 } else { args.max_pages }; // Keep unlimited or user value
+        (depth, pages, true, true, args.stealth) // Force aggressive mode, enable secrets
+    } else {
+        (args.max_depth, args.max_pages, args.aggressive, false, args.stealth)
+    };
+
     // Configure the crawler
-    let config = Config::new()
-        .max_depth(args.max_depth)
+    let mut config = Config::new()
+        .max_depth(max_depth)
         .concurrency(args.concurrency)
-        .max_pages(args.max_pages)
+        .max_pages(max_pages)
         .user_agent(args.user_agent)
         .timeout_secs(args.timeout)
-        .aggressive(args.aggressive);
+        .aggressive(aggressive);
+
+    // Apply stealth mode if enabled
+    if enable_stealth || args.stealth {
+        config = config.stealth(true);
+    }
+
+    // Apply proxy if provided
+    if let Some(proxy_url) = args.proxy {
+        config = config.proxy(proxy_url);
+    }
+
+    // Apply secrets scanning if enabled
+    if enable_secrets {
+        config = config.secrets_scanning(true);
+    }
 
     // Create and run crawler
     let crawler = match Crawler::new(config) {

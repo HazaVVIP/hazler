@@ -1,0 +1,19 @@
+[package]
+name = "hazler-secrets"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+description = "Secret and sensitive data detection for Hazler web crawler"
+keywords = ["security", "secrets", "scanner", "api-keys"]
+categories = ["web-programming", "command-line-utilities"]
+
+[dependencies]
+regex.workspace = true
+once_cell.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

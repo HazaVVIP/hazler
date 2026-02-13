@@ -85,7 +85,8 @@ impl JavaScriptParser {
         // Standard pattern matching
         for pattern in &self.patterns {
             for cap in pattern.captures_iter(js_content) {
-                // Extract URL from capture groups
+                // Extract URL from all capture groups (most patterns have 1-2 groups)
+                // Group 0 is the full match, groups 1+ are captured values
                 for i in 1..cap.len() {
                     if let Some(url_match) = cap.get(i) {
                         let url_str = url_match.as_str();

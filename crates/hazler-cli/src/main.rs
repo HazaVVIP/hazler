@@ -138,7 +138,7 @@ async fn main() {
         .aggressive(aggressive);
 
     // Apply stealth mode if enabled
-    if enable_stealth || args.stealth {
+    if enable_stealth {
         config = config.stealth(true);
     }
 

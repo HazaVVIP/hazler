@@ -111,16 +111,24 @@ impl SecretScanner {
         // For high-sensitivity patterns, redact most of the value
         match pattern_name {
             name if name.contains("Secret") || name.contains("Private") || name.contains("Password") => {
-                if text.len() > 8 {
-                    format!("{}...{}", &text[..4], &text[text.len()-4..])
+                let chars: Vec<char> = text.chars().collect();
+                if chars.len() > 8 {
+                    format!("{}...{}", 
+                        chars.iter().take(4).collect::<String>(),
+                        chars.iter().skip(chars.len() - 4).collect::<String>()
+                    )
                 } else {
                     "***REDACTED***".to_string()
                 }
             }
             _ => {
                 // For other patterns, show a bit more
-                if text.len() > 12 {
-                    format!("{}...{}", &text[..6], &text[text.len()-6..])
+                let chars: Vec<char> = text.chars().collect();
+                if chars.len() > 12 {
+                    format!("{}...{}", 
+                        chars.iter().take(6).collect::<String>(),
+                        chars.iter().skip(chars.len() - 6).collect::<String>()
+                    )
                 } else {
                     text.to_string()
                 }

@@ -68,23 +68,46 @@ mod tests {
     #[test]
     fn test_create_randomized_tls_config() {
         let config = create_randomized_tls_config();
-        assert!(config.is_ok());
+        assert!(config.is_ok(), "Randomized TLS config should be created successfully");
     }
 
     #[test]
     fn test_create_standard_tls_config() {
         let config = create_standard_tls_config();
-        assert!(config.is_ok());
+        assert!(config.is_ok(), "Standard TLS config should be created successfully");
     }
 
     #[test]
     fn test_randomization_produces_different_configs() {
-        let config1 = create_randomized_tls_config().unwrap();
-        let config2 = create_randomized_tls_config().unwrap();
+        // Create multiple randomized configs to verify they can be created repeatedly
+        let config1 = create_randomized_tls_config();
+        let config2 = create_randomized_tls_config();
+        let config3 = create_randomized_tls_config();
         
-        // While we can't directly compare cipher suite orders,
-        // we can verify both configs are valid
-        assert!(config1.alpn_protocols.len() >= 0);
-        assert!(config2.alpn_protocols.len() >= 0);
+        // All configs should be successfully created
+        assert!(config1.is_ok(), "First config creation should succeed");
+        assert!(config2.is_ok(), "Second config creation should succeed");
+        assert!(config3.is_ok(), "Third config creation should succeed");
+        
+        // Verify they are valid ClientConfig instances
+        let config1 = config1.unwrap();
+        let config2 = config2.unwrap();
+        let config3 = config3.unwrap();
+        
+        // Verify configs have the expected structure (alpn_protocols is accessible)
+        // These should be empty vectors by default
+        assert!(config1.alpn_protocols.is_empty());
+        assert!(config2.alpn_protocols.is_empty());
+        assert!(config3.alpn_protocols.is_empty());
+    }
+
+    #[test]
+    fn test_multiple_randomized_configs_can_be_created() {
+        // This test verifies that the randomization process is repeatable
+        // and doesn't have side effects that would prevent creating multiple configs
+        for _ in 0..5 {
+            let config = create_randomized_tls_config();
+            assert!(config.is_ok(), "Each randomized config should be created successfully");
+        }
     }
 }

@@ -165,16 +165,30 @@ The output will show a beautiful tree view like:
 
 ### Common Use Cases
 
+#### Comprehensive Security Scan (Recommended)
+Perform a full security reconnaissance with all features enabled:
+```bash
+hazler https://yoursite.com --all
+```
+
+This activates:
+- Deep crawling (depth 5)
+- Aggressive endpoint discovery
+- Secret and credential detection
+- Framework detection (React, Angular, Vue, etc.)
+- API endpoint mapping
+- Comprehensive security report
+
 #### Site Audit with Statistics
 Crawl your entire site and get detailed statistics:
 ```bash
 hazler https://yoursite.com -d 5 -p 1000 --stats
 ```
 
-#### Security Audit
-Perform a comprehensive security audit with secret detection:
+#### Security Audit with HTML Report
+Perform a comprehensive security audit and generate an HTML report:
 ```bash
-hazler https://yoursite.com -d 4 --report
+hazler https://yoursite.com --all --html-report report.html
 ```
 
 #### Quick Link Check
@@ -223,10 +237,15 @@ Options:
       --include-body                   Include response body in output (excluded by default)
       --fields <FIELDS>                Select specific fields to output (comma-separated)
       --aggressive                     Enable aggressive endpoint discovery mode
+      --all                            Enable comprehensive scanning mode (deep crawl + secrets + framework detection)
       --stats                          Show crawl statistics with distributions
       --report                         Generate comprehensive summary report
+      --html-report <FILE>             Generate HTML report and save to file
       --no-stealth                     Disable stealth mode (enabled by default)
       --no-secrets                     Disable secret scanning (enabled by default)
+      --proxy <PROXY>                  Proxy URL (e.g., socks5://localhost:1080, http://proxy:8080)
+      --strict-domain                  Only crawl the exact domain (no subdomains)
+      --subs                           Allow crawling subdomains
   -v, --verbose                        Verbose output
   -h, --help                           Print help
   -V, --version                        Print version
@@ -237,6 +256,11 @@ Options:
 Basic crawl with human-friendly output (default):
 ```bash
 hazler https://example.com
+```
+
+Comprehensive scan with all features enabled:
+```bash
+hazler https://example.com --all
 ```
 
 Crawl with custom depth and concurrency:
@@ -257,6 +281,11 @@ hazler https://example.com --stats
 Generate comprehensive report with security findings:
 ```bash
 hazler https://example.com --report
+```
+
+Generate HTML report:
+```bash
+hazler https://example.com --html-report report.html
 ```
 
 Output as single JSON object for processing:
@@ -284,6 +313,21 @@ Disable stealth and secrets for faster crawling:
 hazler https://example.com --no-stealth --no-secrets
 ```
 
+Use a proxy for requests:
+```bash
+hazler https://example.com --proxy socks5://localhost:1080
+```
+
+Crawl only the exact domain (no subdomains):
+```bash
+hazler https://example.com --strict-domain
+```
+
+Allow crawling subdomains:
+```bash
+hazler https://example.com --subs
+```
+
 Include body content (excluded by default):
 ```bash
 hazler https://example.com --include-body
@@ -306,6 +350,47 @@ hazler https://example.com -v
 
 Hazler has been enhanced with powerful security reconnaissance capabilities for bug hunting and penetration testing:
 
+### Secret & Credential Detection
+
+Hazler automatically scans all crawled content for sensitive information (enabled by default):
+
+```bash
+# Crawl with secret detection (default)
+hazler https://target.com
+
+# View secrets in comprehensive report
+hazler https://target.com --report
+```
+
+**Detects 38+ types of secrets including:**
+
+**Critical Severity:**
+- AWS Access Keys and Secret Keys
+- GitHub Personal Access Tokens and OAuth Tokens
+- Stripe Live Secret Keys
+- Google Cloud Service Account credentials
+- Private Keys (RSA, SSH, PGP, DSA)
+- Database connection strings
+
+**High Severity:**
+- Generic API keys and tokens
+- Slack tokens and webhooks
+- Azure Storage keys
+- SendGrid and Mailgun API keys
+- Google API Keys
+- JWT tokens
+
+**Medium Severity:**
+- Internal IP addresses (10.x.x.x, 192.168.x.x, 172.16.x.x)
+- OAuth Client IDs and Secrets
+- NPM and PyPI tokens
+
+**Low Severity:**
+- Email addresses
+- Configuration file references (.env, config.json)
+
+Secrets are automatically redacted in output and classified by severity to help prioritize remediation.
+
 ### JavaScript Endpoint Discovery
 
 Hazler automatically extracts endpoints from JavaScript files using advanced regex patterns:
@@ -325,6 +410,20 @@ Supports extraction from:
 - **Router configs**: `path: '/admin/dashboard'`
 - **GraphQL endpoints**: `graphql: '/graphql'`
 - **WebSocket endpoints**: `wss://example.com/socket`
+
+### Framework Detection
+
+Hazler detects modern web frameworks to apply specialized extraction patterns:
+
+**Supported Frameworks:**
+- React (including React Router)
+- Angular (including routing)
+- Vue.js (including Vue Router)
+- Next.js (including API routes)
+- Nuxt
+- Svelte
+- Ember
+- Backbone
 
 ### Aggressive Discovery Mode
 
@@ -569,12 +668,16 @@ If you encounter issues not covered here:
 hazler/
 ├── Cargo.toml                  # Root workspace manifest
 ├── README.md                   # This file
+├── CONTRIBUTING.md             # Contribution guidelines
 ├── LICENSE                     # MIT License
 ├── install.sh                  # Automated installation script
+├── Dockerfile                  # Docker image configuration
 ├── crates/
 │   ├── hazler-core/           # Core crawling engine
 │   ├── hazler-http/           # HTTP client wrapper
 │   ├── hazler-parser/         # HTML parsing
+│   ├── hazler-js-parser/      # JavaScript endpoint extraction
+│   ├── hazler-secrets/        # Secret & credential detection
 │   └── hazler-cli/            # Command-line interface
 ```
 
@@ -595,36 +698,41 @@ RUST_LOG=debug cargo run -- https://example.com
 ## Roadmap
 
 ### Phase 1: MVP ✅
-- Basic HTTP crawler
-- HTML parsing
-- Concurrent crawling
-- CLI interface
-- JSONL output
+- Basic HTTP crawler ✅
+- HTML parsing ✅
+- Concurrent crawling ✅
+- CLI interface ✅
+- Multiple output formats (JSON, JSONL, CSV, Tree, URLs) ✅
 
 ### Phase 2: Security Intelligence ✅
 - **JavaScript endpoint extraction** ✅
 - **Advanced URL normalization** ✅
 - **Aggressive discovery mode** ✅
+- **Framework detection** ✅ (React, Angular, Vue, Next.js, etc.)
+- **Secret scanning** ✅ (38+ patterns for credentials, keys, tokens)
 - **.frame file support** ✅
 - **Regex-based pattern matching** ✅
 - **Template variable replacement** ✅
+- **Comprehensive reporting** ✅
+- **HTML report generation** ✅
 
-### Phase 3: Scale (Planned)
+### Phase 3: Enhanced Stealth & Scale (In Progress)
+- Full WAF evasion implementation
+- Proxy support implementation
+- Advanced rate limiting
 - Priority queue with scoring
 - Content similarity detection (SimHash)
 - Headless browser support
 - Distributed crawling (Redis)
-- Advanced SPA handling
 - OpenTelemetry integration
 - Dashboard
-- Multiple output formats (HAR, SQLite, GraphML)
 
 ### Phase 4: Polish (Planned)
 - robots.txt respect
-- Comprehensive documentation
-- Binary releases
-- Docker images
-- Security audit
+- Binary releases for all platforms
+- Advanced authentication support
+- Resume capability for interrupted crawls
+- Plugin system for extensibility
 
 ## FAQ
 
@@ -638,7 +746,23 @@ Not yet. This is planned for a future release. Use responsibly and only crawl si
 
 ### Can I crawl JavaScript-heavy sites?
 
-Yes! Hazler now includes JavaScript endpoint discovery that extracts API endpoints from JavaScript code using regex patterns. Use `--aggressive` mode for the most thorough discovery.
+Yes! Hazler now includes:
+- JavaScript endpoint discovery that extracts API endpoints from JavaScript code
+- Framework detection (React, Angular, Vue, Next.js, etc.)
+- Specialized extraction patterns for each framework
+
+Use `--aggressive` mode or `--all` mode for the most thorough discovery.
+
+### What is the --all mode?
+
+The `--all` flag enables comprehensive scanning mode, which:
+- Increases crawl depth from 3 to 5 (if using default)
+- Enables aggressive endpoint discovery
+- Activates secret and credential scanning
+- Enables framework detection
+- Provides comprehensive security reporting
+
+This is the recommended mode for security audits and bug bounty reconnaissance.
 
 ### What is aggressive mode?
 
@@ -647,8 +771,20 @@ Aggressive mode (`--aggressive` flag) enables comprehensive endpoint discovery b
 - Generating URL variations (trailing slashes, extensions)
 - Testing API version variants (v1, v2, v3)
 - Parsing .frame files for endpoint definitions
+- Applying framework-specific extraction patterns
 
 This is particularly useful for security reconnaissance and bug hunting.
+
+### What types of secrets can Hazler detect?
+
+Hazler detects 38+ types of secrets including:
+- AWS keys, GitHub tokens, Stripe keys
+- API keys and authentication tokens
+- Private keys (RSA, SSH, PGP)
+- Database connection strings
+- Internal IP addresses and emails
+
+All secrets are classified by severity (Critical, High, Medium, Low) and redacted in output.
 
 ### Does Hazler work with .frame files?
 

@@ -141,7 +141,7 @@ impl NoiseFilter {
     pub fn get_stats(&self) -> NoiseFilterStats {
         let mut stats = NoiseFilterStats::default();
 
-        for (_pattern, count) in &self.pattern_counts {
+        for count in self.pattern_counts.values() {
             if *count > self.threshold {
                 stats.filtered_patterns += 1;
                 stats.filtered_responses += count;

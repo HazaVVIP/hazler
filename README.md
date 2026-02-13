@@ -5,9 +5,7 @@ A fast, efficient, and human-friendly web crawler built in Rust with built-in se
 ## ✨ Key Features
 
 - ✅ **Human-Friendly Output** - Beautiful tree view with colors and clear formatting (default)
-- ✅ **Stealth Mode** - WAF evasion with TLS fingerprinting randomization (enabled by default)
-  - Randomizes TLS cipher suites to evade JA3/JA4 detection
-  - Adaptive rate limiting and realistic browser headers
+- ✅ **Stealth Mode** - WAF evasion enabled by default for better success rates
 - ✅ **Secret Scanning** - Automatic detection of API keys, tokens, and credentials (enabled by default)
 - ✅ HTTP-only crawling with concurrent request handling
 - ✅ HTML parsing and link extraction
@@ -709,35 +707,6 @@ hazler https://example.com -o jsonl
 
 # Disable stealth and secrets for maximum speed
 hazler https://example.com --no-stealth --no-secrets
-```
-
-## 🔐 TLS Fingerprinting Protection
-
-Modern Web Application Firewalls (WAFs) use TLS fingerprinting techniques like JA3 and JA4 to detect and block automated tools. Hazler's stealth mode now includes **TLS fingerprinting randomization** to evade these detection methods.
-
-### How It Works
-
-When stealth mode is enabled (default), Hazler:
-1. **Randomizes cipher suite order** - Each connection uses a unique TLS fingerprint
-2. **Uses rustls TLS backend** - Provides fine-grained control over TLS configuration
-3. **Maintains compatibility** - Still connects securely using system certificates
-
-### Technical Details
-
-- **Standard Mode** (`--no-stealth`): Uses default TLS configuration
-- **Stealth Mode** (default): Randomizes TLS cipher suites on each client creation
-- **Security**: All connections remain secure with proper certificate validation
-
-This makes Hazler significantly harder to fingerprint and block, improving success rates when crawling sites with advanced bot detection.
-
-### Example
-
-```bash
-# Stealth mode with TLS fingerprinting (default)
-hazler https://protected-site.com
-
-# Disable stealth mode if not needed
-hazler https://friendly-site.com --no-stealth
 ```
 
 ## License

@@ -196,7 +196,6 @@ impl Config {
     /// Enable or disable stealth mode for WAF evasion.
     ///
     /// When enabled:
-    /// - Randomizes TLS fingerprints (JA3/JA4) at connection level
     /// - Randomizes request patterns
     /// - Implements adaptive rate limiting
     /// - Maintains session state

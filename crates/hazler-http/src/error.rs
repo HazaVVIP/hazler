@@ -13,6 +13,9 @@ pub enum Error {
 
     #[error("Too many redirects")]
     TooManyRedirects,
+
+    #[error("TLS configuration error: {0}")]
+    TlsConfigError(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

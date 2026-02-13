@@ -42,8 +42,13 @@ pub struct Crawler {
 impl Crawler {
     /// Create a new crawler with the given configuration
     pub fn new(config: Config) -> anyhow::Result<Self> {
-        let http_client =
-            HttpClient::new(&config.user_agent, Duration::from_secs(config.timeout_secs))?;
+        // Create HTTP client with or without stealth mode
+        let http_client = if config.stealth_mode {
+            HttpClient::new_with_stealth(&config.user_agent, Duration::from_secs(config.timeout_secs))?
+        } else {
+            HttpClient::new(&config.user_agent, Duration::from_secs(config.timeout_secs))?
+        };
+        
         let parser = HtmlParser::new();
         let js_parser = JavaScriptParser::new()
             .map_err(|e| anyhow::anyhow!("Failed to create JS parser: {}", e))?;

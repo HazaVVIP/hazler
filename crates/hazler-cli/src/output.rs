@@ -3,6 +3,16 @@ use serde_json::json;
 use std::collections::HashMap;
 use colored::*;
 
+/// Color options for output formatting
+#[derive(Debug, Clone, Copy)]
+enum StatusColor {
+    Green,
+    Yellow,
+    Red,
+    BrightRed,
+    White,
+}
+
 /// Format crawl results for output
 pub struct OutputFormatter {
     exclude_body: bool,
@@ -475,24 +485,24 @@ fn truncate_string(s: &str, max_len: usize) -> String {
     }
 }
 
-/// Get status indicator and color name for a given HTTP status code
-fn get_status_indicator(status_code: u16) -> (&'static str, &'static str) {
+/// Get status indicator and color for a given HTTP status code
+fn get_status_indicator(status_code: u16) -> (&'static str, StatusColor) {
     match status_code {
-        200..=299 => ("✓", "green"),
-        300..=399 => ("↻", "yellow"),
-        400..=499 => ("✗", "red"),
-        500..=599 => ("⚠", "bright_red"),
-        _ => ("?", "white"),
+        200..=299 => ("✓", StatusColor::Green),
+        300..=399 => ("↻", StatusColor::Yellow),
+        400..=499 => ("✗", StatusColor::Red),
+        500..=599 => ("⚠", StatusColor::BrightRed),
+        _ => ("?", StatusColor::White),
     }
 }
 
-/// Apply color to a string based on color name
-fn apply_color(text: &str, color: &str) -> colored::ColoredString {
+/// Apply color to a string based on StatusColor enum
+fn apply_color(text: &str, color: StatusColor) -> colored::ColoredString {
     match color {
-        "green" => text.green(),
-        "yellow" => text.yellow(),
-        "red" => text.red(),
-        "bright_red" => text.bright_red(),
-        _ => text.white(),
+        StatusColor::Green => text.green(),
+        StatusColor::Yellow => text.yellow(),
+        StatusColor::Red => text.red(),
+        StatusColor::BrightRed => text.bright_red(),
+        StatusColor::White => text.white(),
     }
 }

@@ -8,6 +8,9 @@ use url::Url;
 mod output;
 use output::{generate_report, generate_stats, OutputFormatter};
 
+mod html_report;
+use html_report::generate_html_report;
+
 #[derive(Parser, Debug)]
 #[command(name = "hazler")]
 #[command(author = "Hazler Team")]
@@ -58,6 +61,12 @@ struct Args {
     #[arg(long)]
     report: bool,
 
+    /// Generate HTML report and save to file
+    /// Creates a comprehensive HTML report with visualizations
+    /// Example: --html-report report.html
+    #[arg(long, value_name = "FILE")]
+    html_report: Option<String>,
+
     /// Verbose output
     #[arg(short = 'v', long)]
     verbose: bool,
@@ -102,6 +111,18 @@ struct Args {
     /// Proxy URL (e.g., socks5://localhost:1080, http://proxy:8080)
     #[arg(long)]
     proxy: Option<String>,
+
+    /// Enable strict domain mode - only crawl the exact domain (no subdomains)
+    /// When enabled, only the exact domain specified in the URL will be crawled
+    /// Example: If URL is example.com, sub.example.com will be excluded
+    #[arg(long)]
+    strict_domain: bool,
+
+    /// Allow subdomains - permits crawling of all subdomains of the target domain
+    /// Example: If URL is example.com, also crawl sub.example.com, api.example.com, etc.
+    /// Note: This is ignored if --strict-domain is enabled
+    #[arg(long)]
+    subs: bool,
 }
 
 #[tokio::main]
@@ -165,6 +186,13 @@ async fn main() {
     // Apply stealth mode based on flag (defaults to enabled)
     config = config.stealth(enable_stealth);
 
+    // Apply scope control options
+    if args.strict_domain {
+        config = config.strict_domain(true);
+    } else if args.subs {
+        config = config.allow_subdomains(true);
+    }
+
     // Apply proxy if provided
     if let Some(proxy_url) = args.proxy {
         config = config.proxy(proxy_url);
@@ -184,6 +212,22 @@ async fn main() {
 
     match crawler.crawl(start_url).await {
         Ok(result) => {
+            // Generate HTML report if requested
+            if let Some(html_report_path) = &args.html_report {
+                match generate_html_report(&result, std::path::Path::new(html_report_path)) {
+                    Ok(_) => {
+                        eprintln!(
+                            "{} HTML report generated: {}",
+                            "✓".green().bold(),
+                            html_report_path.bright_cyan()
+                        );
+                    }
+                    Err(e) => {
+                        error!("Failed to generate HTML report: {}", e);
+                    }
+                }
+            }
+
             // Generate report if requested (to stderr, doesn't interfere with output)
             if args.report {
                 eprintln!("{}", generate_report(&result));

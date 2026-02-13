@@ -43,6 +43,10 @@ pub struct Config {
     pub proxy_url: Option<String>,
     /// Enable secrets and sensitive data scanning
     pub secrets_scanning: bool,
+    /// Enable strict domain mode (only exact domain, no subdomains)
+    pub strict_domain: bool,
+    /// Allow crawling subdomains
+    pub allow_subdomains: bool,
 }
 
 impl Default for Config {
@@ -60,6 +64,8 @@ impl Default for Config {
             stealth_mode: true, // Enable stealth mode by default
             proxy_url: None,
             secrets_scanning: true, // Enable secrets scanning by default
+            strict_domain: false,
+            allow_subdomains: false,
         }
     }
 }
@@ -241,6 +247,45 @@ impl Config {
     /// ```
     pub fn secrets_scanning(mut self, enabled: bool) -> Self {
         self.secrets_scanning = enabled;
+        self
+    }
+
+    /// Enable strict domain mode - only crawl the exact domain (no subdomains).
+    ///
+    /// When enabled, the crawler will only visit URLs from the exact domain
+    /// specified in the starting URL. Subdomains will be excluded.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().strict_domain(true);
+    /// assert_eq!(config.strict_domain, true);
+    /// ```
+    pub fn strict_domain(mut self, enabled: bool) -> Self {
+        self.strict_domain = enabled;
+        self
+    }
+
+    /// Allow crawling subdomains of the target domain.
+    ///
+    /// When enabled, the crawler will visit subdomains of the starting domain.
+    /// For example, if the starting URL is example.com, the crawler will also
+    /// visit sub.example.com, api.example.com, etc.
+    ///
+    /// Note: This option is ignored if strict_domain is enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().allow_subdomains(true);
+    /// assert_eq!(config.allow_subdomains, true);
+    /// ```
+    pub fn allow_subdomains(mut self, enabled: bool) -> Self {
+        self.allow_subdomains = enabled;
         self
     }
 }

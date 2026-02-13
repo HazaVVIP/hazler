@@ -89,6 +89,7 @@ pub mod normalizer;
 pub mod queue;
 pub mod scope;
 pub mod types;
+pub mod noise_filter;
 
 pub use config::Config;
 pub use crawler::Crawler;
@@ -96,3 +97,4 @@ pub use normalizer::AdvancedUrlNormalizer;
 pub use queue::UrlQueue;
 pub use scope::ScopeValidator;
 pub use types::{CrawlResult, Finding, FindingStats, Page, Severity};
+pub use noise_filter::{NoiseFilter, NoiseFilterStats, ResponsePattern};

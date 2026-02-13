@@ -73,7 +73,15 @@ impl Crawler {
 
         let mut queue = UrlQueue::new();
         let mut result = CrawlResult::new();
-        let scope_validator = ScopeValidator::new(&start_url);
+        
+        // Configure scope validator based on config settings
+        let mut scope_validator = ScopeValidator::new(&start_url);
+        
+        // If strict_domain is enabled, do not allow subdomains
+        // If allow_subdomains is enabled (and not strict), allow subdomains
+        if !self.config.strict_domain && self.config.allow_subdomains {
+            scope_validator = scope_validator.allow_subdomains(true);
+        }
 
         // Add the starting URL
         queue.push(start_url.clone(), 0);

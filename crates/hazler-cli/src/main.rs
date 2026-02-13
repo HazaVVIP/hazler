@@ -102,6 +102,18 @@ struct Args {
     /// Proxy URL (e.g., socks5://localhost:1080, http://proxy:8080)
     #[arg(long)]
     proxy: Option<String>,
+
+    /// Enable strict domain mode - only crawl the exact domain (no subdomains)
+    /// When enabled, only the exact domain specified in the URL will be crawled
+    /// Example: If URL is example.com, sub.example.com will be excluded
+    #[arg(long)]
+    strict_domain: bool,
+
+    /// Allow subdomains - permits crawling of all subdomains of the target domain
+    /// Example: If URL is example.com, also crawl sub.example.com, api.example.com, etc.
+    /// Note: This is ignored if --strict-domain is enabled
+    #[arg(long)]
+    subs: bool,
 }
 
 #[tokio::main]
@@ -164,6 +176,13 @@ async fn main() {
 
     // Apply stealth mode based on flag (defaults to enabled)
     config = config.stealth(enable_stealth);
+
+    // Apply scope control options
+    if args.strict_domain {
+        config = config.strict_domain(true);
+    } else if args.subs {
+        config = config.allow_subdomains(true);
+    }
 
     // Apply proxy if provided
     if let Some(proxy_url) = args.proxy {

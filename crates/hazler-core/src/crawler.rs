@@ -2,10 +2,11 @@ use crate::config::Config;
 use crate::normalizer::AdvancedUrlNormalizer;
 use crate::queue::UrlQueue;
 use crate::scope::ScopeValidator;
-use crate::types::{CrawlResult, Page};
+use crate::types::{CrawlResult, Finding, FindingStats, Page, Severity};
 use hazler_http::HttpClient;
 use hazler_js_parser::{FrameFileParser, JavaScriptParser};
 use hazler_parser::HtmlParser;
+use hazler_secrets::SecretScanner;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -22,6 +23,7 @@ struct CrawlPageContext {
     scope_validator: ScopeValidator,
     max_depth: usize,
     aggressive: bool,
+    secret_scanner: Option<SecretScanner>,
 }
 
 /// Main crawler implementation
@@ -32,6 +34,7 @@ pub struct Crawler {
     js_parser: JavaScriptParser,
     frame_parser: FrameFileParser,
     url_normalizer: AdvancedUrlNormalizer,
+    secret_scanner: Option<SecretScanner>,
 }
 
 impl Crawler {
@@ -45,6 +48,13 @@ impl Crawler {
         let frame_parser = FrameFileParser::new()
             .map_err(|e| anyhow::anyhow!("Failed to create frame parser: {}", e))?;
         let url_normalizer = AdvancedUrlNormalizer::new();
+        
+        // Initialize secret scanner if secrets scanning is enabled
+        let secret_scanner = if config.secrets_scanning {
+            Some(SecretScanner::new())
+        } else {
+            None
+        };
 
         Ok(Self {
             config,
@@ -53,6 +63,7 @@ impl Crawler {
             js_parser,
             frame_parser,
             url_normalizer,
+            secret_scanner,
         })
     }
 
@@ -95,6 +106,7 @@ impl Crawler {
                     let scope_validator = scope_validator.clone();
                     let max_depth = self.config.max_depth;
                     let aggressive = self.config.aggressive_discovery;
+                    let secret_scanner = self.secret_scanner.clone();
 
                     let task = tokio::spawn(async move {
                         let _permit = semaphore.acquire().await.unwrap();
@@ -107,6 +119,7 @@ impl Crawler {
                             scope_validator,
                             max_depth,
                             aggressive,
+                            secret_scanner,
                         };
                         Self::crawl_page(url, depth, context).await
                     });
@@ -157,6 +170,29 @@ impl Crawler {
             result.total_urls,
             result.errors.len()
         );
+
+        // Calculate secret findings statistics if secrets scanning was enabled
+        if self.config.secrets_scanning {
+            let mut stats = FindingStats::default();
+            for page in &result.pages {
+                for finding in &page.secrets {
+                    stats.total += 1;
+                    match finding.severity {
+                        Severity::Critical => stats.critical += 1,
+                        Severity::High => stats.high += 1,
+                        Severity::Medium => stats.medium += 1,
+                        Severity::Low => stats.low += 1,
+                    }
+                }
+            }
+            if stats.total > 0 {
+                info!(
+                    "Secret findings: {} total (Critical: {}, High: {}, Medium: {}, Low: {})",
+                    stats.total, stats.critical, stats.high, stats.medium, stats.low
+                );
+                result.secret_findings = Some(stats);
+            }
+        }
 
         Ok(result)
     }
@@ -242,10 +278,41 @@ impl Crawler {
         });
 
         // Create page object
-        let mut page = Page::new(url.clone(), response.status_code, response.body, depth);
+        let mut page = Page::new(url.clone(), response.status_code, response.body.clone(), depth);
         page.headers = response.headers;
         page.content_type = response.content_type;
         page.links = links.clone();
+
+        // Scan for secrets if enabled
+        if let Some(ref scanner) = context.secret_scanner {
+            let findings = scanner.scan(&response.body, url.as_str());
+            if !findings.is_empty() {
+                info!(
+                    "Found {} secret(s) at {}",
+                    findings.len(),
+                    url
+                );
+                // Convert hazler_secrets::Finding to our Finding type
+                page.secrets = findings
+                    .into_iter()
+                    .map(|f| Finding {
+                        secret_type: f.secret_type,
+                        severity: match f.severity {
+                            hazler_secrets::Severity::Critical => Severity::Critical,
+                            hazler_secrets::Severity::High => Severity::High,
+                            hazler_secrets::Severity::Medium => Severity::Medium,
+                            hazler_secrets::Severity::Low => Severity::Low,
+                        },
+                        description: f.description,
+                        line: f.line,
+                        column: f.column,
+                        context: f.context,
+                        matched_text: f.matched_text,
+                        location: f.location,
+                    })
+                    .collect();
+            }
+        }
 
         // Filter links by scope and depth
         let new_urls: Vec<(Url, usize)> = links

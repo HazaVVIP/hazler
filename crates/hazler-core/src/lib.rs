@@ -95,4 +95,4 @@ pub use crawler::Crawler;
 pub use normalizer::AdvancedUrlNormalizer;
 pub use queue::UrlQueue;
 pub use scope::ScopeValidator;
-pub use types::{CrawlResult, Page};
+pub use types::{CrawlResult, Finding, FindingStats, Page, Severity};

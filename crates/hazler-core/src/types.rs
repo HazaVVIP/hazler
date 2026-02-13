@@ -2,6 +2,36 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use url::Url;
 
+/// Severity level for findings
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Severity {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+
+/// A secret or sensitive information finding
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Finding {
+    /// Type of secret found
+    pub secret_type: String,
+    /// Severity level
+    pub severity: Severity,
+    /// Description of the finding
+    pub description: String,
+    /// Line number where found (1-indexed)
+    pub line: usize,
+    /// Column number where found (1-indexed)
+    pub column: usize,
+    /// Context (surrounding text)
+    pub context: String,
+    /// Matched text (may be redacted for sensitive values)
+    pub matched_text: String,
+    /// File or URL where found
+    pub location: String,
+}
+
 /// Represents a crawled web page
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Page {
@@ -19,6 +49,9 @@ pub struct Page {
     pub links: Vec<Url>,
     /// Depth in the crawl tree
     pub depth: usize,
+    /// Secret findings (if secrets scanning is enabled)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub secrets: Vec<Finding>,
 }
 
 impl Page {
@@ -31,6 +64,7 @@ impl Page {
             content_type: None,
             links: Vec::new(),
             depth,
+            secrets: Vec::new(),
         }
     }
 }
@@ -46,6 +80,19 @@ pub struct CrawlResult {
     pub total_urls: usize,
     /// Errors encountered
     pub errors: Vec<String>,
+    /// Total secret findings (if secrets scanning is enabled)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret_findings: Option<FindingStats>,
+}
+
+/// Statistics about findings
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FindingStats {
+    pub total: usize,
+    pub critical: usize,
+    pub high: usize,
+    pub medium: usize,
+    pub low: usize,
 }
 
 impl CrawlResult {
@@ -55,6 +102,7 @@ impl CrawlResult {
             total_pages: 0,
             total_urls: 0,
             errors: Vec::new(),
+            secret_findings: None,
         }
     }
 }

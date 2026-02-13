@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::framework::{detect_framework, get_framework_patterns, Framework};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashSet;
@@ -16,6 +17,7 @@ static JS_URL_PATTERNS: &[&str] = &[
     r#"\.open\s*\(\s*["'][^"']*["']\s*,\s*["']([^"']+)["']"#,
     // Axios calls
     r#"axios\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#,
+    r#"axios\(\s*\{[^}]*url\s*:\s*["']([^"']+)["']"#,
     // jQuery AJAX
     r#"\$\.ajax\s*\(\s*\{[^}]*url\s*:\s*["']([^"']+)["']"#,
     r#"\$\.(get|post)\s*\(\s*["']([^"']+)["']"#,
@@ -39,6 +41,20 @@ static JS_URL_PATTERNS: &[&str] = &[
     r#"\.put\s*\(\s*["']([^"']+)["']"#,
     r#"\.delete\s*\(\s*["']([^"']+)["']"#,
     r#"\.patch\s*\(\s*["']([^"']+)["']"#,
+    // React Router patterns
+    r#"<Route\s+path=["']([^"']+)["']"#,
+    r#"useNavigate\s*\(\s*\)\s*\(\s*["']([^"']+)["']"#,
+    // Angular routing
+    r#"RouterModule\.forRoot\([^)]*path:\s*["']([^"']+)["']"#,
+    r#"\.navigate\(\s*\[["']([^"']+)["']"#,
+    // Vue Router
+    r#"router\.push\(\s*["']([^"']+)["']"#,
+    // Next.js API routes
+    r#"/api/[^"'\s]+"#,
+    // Express-like route definitions
+    r#"(app|router)\.(get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#,
+    // Import statements with URLs
+    r#"import\s+.*\s+from\s+["']([^"']+)["']"#,
 ];
 
 /// Template variable pattern for replacement
@@ -66,9 +82,11 @@ impl JavaScriptParser {
     pub fn extract_endpoints(&self, js_content: &str, base_url: &Url) -> Vec<Url> {
         let mut endpoints = HashSet::new();
 
+        // Standard pattern matching
         for pattern in &self.patterns {
             for cap in pattern.captures_iter(js_content) {
-                // Extract URL from capture groups
+                // Extract URL from all capture groups (most patterns have 1-2 groups)
+                // Group 0 is the full match, groups 1+ are captured values
                 for i in 1..cap.len() {
                     if let Some(url_match) = cap.get(i) {
                         let url_str = url_match.as_str();
@@ -82,7 +100,42 @@ impl JavaScriptParser {
             }
         }
 
+        // Detect frameworks and apply framework-specific patterns
+        let frameworks = detect_framework(js_content);
+        for framework in &frameworks {
+            if let Some(framework_endpoints) = self.extract_framework_endpoints(js_content, base_url, framework) {
+                endpoints.extend(framework_endpoints);
+            }
+        }
+
         endpoints.into_iter().collect()
+    }
+
+    /// Extract endpoints using framework-specific patterns
+    fn extract_framework_endpoints(&self, js_content: &str, base_url: &Url, framework: &Framework) -> Option<Vec<Url>> {
+        let patterns = get_framework_patterns(framework);
+        if patterns.is_empty() {
+            return None;
+        }
+
+        let mut endpoints = Vec::new();
+        
+        for pattern_str in patterns {
+            if let Ok(pattern) = Regex::new(&pattern_str) {
+                for cap in pattern.captures_iter(js_content) {
+                    for i in 1..cap.len() {
+                        if let Some(url_match) = cap.get(i) {
+                            let url_str = url_match.as_str();
+                            if let Ok(url) = self.normalize_and_resolve(url_str, base_url) {
+                                endpoints.push(url);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(endpoints)
     }
 
     /// Normalize and resolve a URL string against a base URL

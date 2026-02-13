@@ -1,4 +1,4 @@
-use hazler_core::{CrawlResult, Page};
+use hazler_core::{CrawlResult, Page, Severity};
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -53,6 +53,11 @@ impl OutputFormatter {
         data["content_type"] = json!(page.content_type);
         data["links"] = json!(page.links.iter().map(|u| u.as_str()).collect::<Vec<_>>());
 
+        // Include secret findings if any
+        if !page.secrets.is_empty() {
+            data["secrets"] = json!(page.secrets);
+        }
+
         // If specific fields are requested, filter to only those
         if let Some(ref fields) = self.fields {
             let mut filtered = serde_json::Map::new();
@@ -76,12 +81,17 @@ impl OutputFormatter {
     pub fn format_json(&self, result: &CrawlResult) -> Result<String, serde_json::Error> {
         let pages: Vec<_> = result.pages.iter().map(|p| self.filter_page(p)).collect();
 
-        let output = json!({
+        let mut output = json!({
             "pages": pages,
             "total_pages": result.total_pages,
             "total_urls": result.total_urls,
             "errors": result.errors,
         });
+
+        // Include secret findings if any
+        if let Some(ref stats) = result.secret_findings {
+            output["secret_findings"] = json!(stats);
+        }
 
         serde_json::to_string_pretty(&output)
     }
@@ -335,5 +345,88 @@ pub fn generate_report(result: &CrawlResult) -> String {
         output.push_str("\n✅ No issues detected!\n");
     }
 
+    // Security Findings Section
+    if let Some(ref stats) = result.secret_findings {
+        if stats.total > 0 {
+            output.push_str("\n=== 🔒 SECURITY FINDINGS ===\n");
+            output.push_str(&format!("\nTotal secrets found: {}\n", stats.total));
+            
+            if stats.critical > 0 {
+                output.push_str(&format!("  🔴 Critical: {}\n", stats.critical));
+            }
+            if stats.high > 0 {
+                output.push_str(&format!("  🟠 High: {}\n", stats.high));
+            }
+            if stats.medium > 0 {
+                output.push_str(&format!("  🟡 Medium: {}\n", stats.medium));
+            }
+            if stats.low > 0 {
+                output.push_str(&format!("  🟢 Low: {}\n", stats.low));
+            }
+
+            // Show detailed findings by severity
+            let mut critical_findings = Vec::new();
+            let mut high_findings = Vec::new();
+
+            for page in &result.pages {
+                for finding in &page.secrets {
+                    match finding.severity {
+                        Severity::Critical => critical_findings.push((page, finding)),
+                        Severity::High => high_findings.push((page, finding)),
+                        _ => {}
+                    }
+                }
+            }
+
+            // Show critical findings
+            if !critical_findings.is_empty() {
+                output.push_str("\n🔴 CRITICAL Findings:\n");
+                for (i, (page, finding)) in critical_findings.iter().take(10).enumerate() {
+                    output.push_str(&format!(
+                        "  {}. {} at {}\n     Location: line {}, column {}\n     Context: {}\n",
+                        i + 1,
+                        finding.secret_type,
+                        page.url,
+                        finding.line,
+                        finding.column,
+                        truncate_string(&finding.context, 100)
+                    ));
+                }
+                if critical_findings.len() > 10 {
+                    output.push_str(&format!("  ... and {} more critical findings\n", critical_findings.len() - 10));
+                }
+            }
+
+            // Show high severity findings
+            if !high_findings.is_empty() {
+                output.push_str("\n🟠 HIGH Severity Findings:\n");
+                for (i, (page, finding)) in high_findings.iter().take(5).enumerate() {
+                    output.push_str(&format!(
+                        "  {}. {} at {}\n     Location: line {}, column {}\n",
+                        i + 1,
+                        finding.secret_type,
+                        page.url,
+                        finding.line,
+                        finding.column
+                    ));
+                }
+                if high_findings.len() > 5 {
+                    output.push_str(&format!("  ... and {} more high severity findings\n", high_findings.len() - 5));
+                }
+            }
+
+            output.push_str("\n⚠️  IMPORTANT: Review and remediate all findings immediately!\n");
+        }
+    }
+
     output
+}
+
+/// Truncate a string to a maximum length with ellipsis
+fn truncate_string(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len])
+    }
 }

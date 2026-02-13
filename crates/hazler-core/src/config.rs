@@ -37,6 +37,12 @@ pub struct Config {
     pub max_redirects: usize,
     /// Enable aggressive endpoint discovery mode
     pub aggressive_discovery: bool,
+    /// Enable stealth mode for WAF evasion
+    pub stealth_mode: bool,
+    /// Proxy URL for requests
+    pub proxy_url: Option<String>,
+    /// Enable secrets and sensitive data scanning
+    pub secrets_scanning: bool,
 }
 
 impl Default for Config {
@@ -51,6 +57,9 @@ impl Default for Config {
             follow_redirects: true,
             max_redirects: 5,
             aggressive_discovery: false,
+            stealth_mode: false,
+            proxy_url: None,
+            secrets_scanning: false,
         }
     }
 }
@@ -175,6 +184,63 @@ impl Config {
     /// ```
     pub fn aggressive(mut self, enabled: bool) -> Self {
         self.aggressive_discovery = enabled;
+        self
+    }
+
+    /// Enable or disable stealth mode for WAF evasion.
+    ///
+    /// When enabled:
+    /// - Randomizes request patterns
+    /// - Implements adaptive rate limiting
+    /// - Maintains session state
+    /// - Uses realistic browser headers
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().stealth(true);
+    /// assert_eq!(config.stealth_mode, true);
+    /// ```
+    pub fn stealth(mut self, enabled: bool) -> Self {
+        self.stealth_mode = enabled;
+        self
+    }
+
+    /// Set proxy URL for requests.
+    ///
+    /// Supports HTTP, HTTPS, and SOCKS5 proxies.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().proxy("socks5://localhost:1080".to_string());
+    /// ```
+    pub fn proxy(mut self, proxy_url: String) -> Self {
+        self.proxy_url = Some(proxy_url);
+        self
+    }
+
+    /// Enable or disable secrets and sensitive data scanning.
+    ///
+    /// When enabled, scans responses for:
+    /// - API keys and tokens
+    /// - Credentials and passwords
+    /// - Internal information leakage
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().secrets_scanning(true);
+    /// assert_eq!(config.secrets_scanning, true);
+    /// ```
+    pub fn secrets_scanning(mut self, enabled: bool) -> Self {
+        self.secrets_scanning = enabled;
         self
     }
 }

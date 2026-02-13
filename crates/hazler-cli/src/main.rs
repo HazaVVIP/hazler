@@ -3,6 +3,7 @@ use hazler_core::{Config, Crawler};
 use std::process;
 use tracing::{error, Level};
 use url::Url;
+use colored::Colorize;
 
 mod output;
 use output::{generate_report, generate_stats, OutputFormatter};
@@ -38,7 +39,7 @@ struct Args {
     timeout: u64,
 
     /// Output format (json, jsonl, urls, csv, or tree)
-    #[arg(short = 'o', long, default_value = "jsonl")]
+    #[arg(short = 'o', long, default_value = "tree")]
     output_format: String,
 
     /// Include response body in output (excluded by default for clean output)
@@ -81,13 +82,22 @@ struct Args {
     #[arg(long)]
     all: bool,
 
-    /// Enable stealth mode to evade WAF detection
-    /// - Randomizes request patterns
-    /// - Implements adaptive rate limiting
-    /// - Maintains session state
-    /// - Uses realistic browser headers
+    /// Disable stealth mode (enabled by default)
+    /// Stealth mode helps evade WAF detection by:
+    /// - Randomizing request patterns
+    /// - Implementing adaptive rate limiting
+    /// - Maintaining session state
+    /// - Using realistic browser headers
     #[arg(long)]
-    stealth: bool,
+    no_stealth: bool,
+
+    /// Disable secret scanning (enabled by default)
+    /// Secret scanning detects:
+    /// - API keys and tokens
+    /// - Credentials and passwords
+    /// - Internal information leakage
+    #[arg(long)]
+    no_secrets: bool,
 
     /// Proxy URL (e.g., socks5://localhost:1080, http://proxy:8080)
     #[arg(long)]
@@ -123,9 +133,10 @@ async fn main() {
         // --all mode: comprehensive scanning
         let depth = if args.max_depth == 3 { 5 } else { args.max_depth }; // Increase depth if using default
         let pages = if args.max_pages == 0 { 0 } else { args.max_pages }; // Keep unlimited or user value
-        (depth, pages, true, true, args.stealth) // Force aggressive mode, enable secrets
+        (depth, pages, true, true, !args.no_stealth) // Force aggressive mode, enable secrets
     } else {
-        (args.max_depth, args.max_pages, args.aggressive, false, args.stealth)
+        // Normal mode: stealth and secrets are enabled by default (can be disabled with flags)
+        (args.max_depth, args.max_pages, args.aggressive, !args.no_secrets, !args.no_stealth)
     };
 
     // Configure the crawler
@@ -137,20 +148,16 @@ async fn main() {
         .timeout_secs(args.timeout)
         .aggressive(aggressive);
 
-    // Apply stealth mode if enabled
-    if enable_stealth {
-        config = config.stealth(true);
-    }
+    // Apply stealth mode based on flag (defaults to enabled)
+    config = config.stealth(enable_stealth);
 
     // Apply proxy if provided
     if let Some(proxy_url) = args.proxy {
         config = config.proxy(proxy_url);
     }
 
-    // Apply secrets scanning if enabled
-    if enable_secrets {
-        config = config.secrets_scanning(true);
-    }
+    // Apply secrets scanning based on flag (defaults to enabled)
+    config = config.secrets_scanning(enable_secrets);
 
     // Create and run crawler
     let crawler = match Crawler::new(config) {
@@ -214,17 +221,46 @@ async fn main() {
 
             // Print summary to stderr (unless --stats or --report was used)
             if !args.stats && !args.report {
-                eprintln!("\n=== Crawl Summary ===");
-                eprintln!("Total pages crawled: {}", result.total_pages);
-                eprintln!("Total URLs discovered: {}", result.total_urls);
-                eprintln!("Errors: {}", result.errors.len());
+                eprintln!("\n{}", "═".repeat(80).bright_blue());
+                eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
+                eprintln!("{}", "═".repeat(80).bright_blue());
+                eprintln!("{} {}", "Total pages crawled:".bright_white(), result.total_pages.to_string().green().bold());
+                eprintln!("{} {}", "Total URLs discovered:".bright_white(), result.total_urls.to_string().cyan().bold());
+                eprintln!("{} {}", "Errors encountered:".bright_white(), 
+                    if !result.errors.is_empty() {
+                        result.errors.len().to_string().red().bold()
+                    } else {
+                        result.errors.len().to_string().green().bold()
+                    }
+                );
 
-                if !result.errors.is_empty() && args.verbose {
-                    eprintln!("\n=== Errors ===");
-                    for error in &result.errors {
-                        eprintln!("  - {}", error);
+                // Show secrets summary if any found
+                if let Some(ref stats) = result.secret_findings {
+                    if stats.total > 0 {
+                        eprintln!("\n{} {}", "🔒 Secrets found:".bright_red().bold(), stats.total.to_string().bright_red().bold());
+                        if stats.critical > 0 {
+                            eprintln!("  {} {}", "Critical:".red(), stats.critical);
+                        }
+                        if stats.high > 0 {
+                            eprintln!("  {} {}", "High:".yellow(), stats.high);
+                        }
+                        if stats.medium > 0 {
+                            eprintln!("  {} {}", "Medium:".yellow(), stats.medium);
+                        }
+                        if stats.low > 0 {
+                            eprintln!("  {} {}", "Low:".cyan(), stats.low);
+                        }
                     }
                 }
+
+                if !result.errors.is_empty() && args.verbose {
+                    eprintln!("\n{}", "⚠️  ERRORS".yellow().bold());
+                    for error in &result.errors {
+                        eprintln!("  {} {}", "•".red(), error);
+                    }
+                }
+
+                eprintln!("{}\n", "═".repeat(80).bright_blue());
             }
         }
         Err(e) => {

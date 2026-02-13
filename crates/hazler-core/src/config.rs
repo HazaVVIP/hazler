@@ -57,9 +57,9 @@ impl Default for Config {
             follow_redirects: true,
             max_redirects: 5,
             aggressive_discovery: false,
-            stealth_mode: false,
+            stealth_mode: true,  // Enable stealth mode by default
             proxy_url: None,
-            secrets_scanning: false,
+            secrets_scanning: true,  // Enable secrets scanning by default
         }
     }
 }

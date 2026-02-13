@@ -1,19 +1,20 @@
 # Hazler - Next-Generation Intelligent Web Crawler
 
-A fast, efficient web crawler built in Rust.
+A fast, efficient, and human-friendly web crawler built in Rust with built-in security features.
 
-## Features (Phase 1 MVP)
+## ✨ Key Features
 
-- ✅ HTTP-only crawling
-- ✅ Concurrent request handling with configurable concurrency
+- ✅ **Human-Friendly Output** - Beautiful tree view with colors and clear formatting (default)
+- ✅ **Stealth Mode** - WAF evasion enabled by default for better success rates
+- ✅ **Secret Scanning** - Automatic detection of API keys, tokens, and credentials (enabled by default)
+- ✅ HTTP-only crawling with concurrent request handling
 - ✅ HTML parsing and link extraction
 - ✅ **JavaScript endpoint discovery** with regex-based extraction
 - ✅ **Advanced URL normalization** for better endpoint discovery
 - ✅ **Aggressive discovery mode** for security reconnaissance
 - ✅ **.frame file support** for endpoint extraction
 - ✅ Scope validation (stays within domain)
-- ✅ Depth control
-- ✅ JSONL output format (body excluded by default for clean output)
+- ✅ Depth control and multiple output formats
 - ✅ Command-line interface with flexible options
 
 ## Prerequisites
@@ -148,14 +149,32 @@ Start with a simple crawl of a website:
 hazler https://example.com
 ```
 
-This will crawl `example.com` with default settings (depth: 3, concurrency: 10) and output results in JSONL format.
+This will crawl `example.com` with:
+- **Human-friendly tree output** with colors and status indicators
+- **Stealth mode enabled** for better success rates and WAF evasion
+- **Secret scanning enabled** to detect sensitive data leaks
+- Default depth of 3 and concurrency of 10
+
+The output will show a beautiful tree view like:
+```
+🌐 HAZLER CRAWL RESULTS
+✓ [200] https://example.com/ (15 links)
+  ✓ [200] https://example.com/about (5 links)
+  ✓ [200] https://example.com/contact (3 links)
+```
 
 ### Common Use Cases
 
-#### Site Audit
-Crawl your entire site to discover all pages:
+#### Site Audit with Statistics
+Crawl your entire site and get detailed statistics:
 ```bash
-hazler https://yoursite.com -d 5 -p 1000 -o json > site-audit.json
+hazler https://yoursite.com -d 5 -p 1000 --stats
+```
+
+#### Security Audit
+Perform a comprehensive security audit with secret detection:
+```bash
+hazler https://yoursite.com -d 4 --report
 ```
 
 #### Quick Link Check
@@ -164,16 +183,16 @@ Check links on a specific page (depth 1):
 hazler https://yoursite.com -d 1 -c 5
 ```
 
-#### Large Site Crawl
-Crawl a large site with high concurrency:
+#### Large Site Crawl with JSON Output
+Crawl a large site and save machine-readable output:
 ```bash
-hazler https://example.com -d 4 -c 20 -p 5000
+hazler https://example.com -d 4 -c 20 -p 5000 -o json > results.json
 ```
 
-#### Custom User Agent
-Use a custom user agent string:
+#### Disable Stealth/Secrets for Speed
+If you need faster crawling and don't need stealth or secret scanning:
 ```bash
-hazler https://example.com -u "MyBot/1.0 (compatible; +https://mysite.com)"
+hazler https://example.com --no-stealth --no-secrets
 ```
 
 ## Usage
@@ -200,18 +219,25 @@ Options:
   -p, --max-pages <MAX_PAGES>          Maximum number of pages to crawl (0 = unlimited) [default: 0]
   -u, --user-agent <USER_AGENT>        Custom user agent string [default: Hazler/0.1.0]
   -t, --timeout <TIMEOUT>              Request timeout in seconds [default: 10]
-  -o, --output-format <OUTPUT_FORMAT>  Output format (json, jsonl, urls, csv, or tree) [default: jsonl]
+  -o, --output-format <OUTPUT_FORMAT>  Output format (json, jsonl, urls, csv, or tree) [default: tree]
       --include-body                   Include response body in output (excluded by default)
       --fields <FIELDS>                Select specific fields to output (comma-separated)
       --aggressive                     Enable aggressive endpoint discovery mode
-      --stats                          Show crawl statistics
-      --report                         Generate summary report
+      --stats                          Show crawl statistics with distributions
+      --report                         Generate comprehensive summary report
+      --no-stealth                     Disable stealth mode (enabled by default)
+      --no-secrets                     Disable secret scanning (enabled by default)
   -v, --verbose                        Verbose output
   -h, --help                           Print help
   -V, --version                        Print version
 ```
 
 ### Examples
+
+Basic crawl with human-friendly output (default):
+```bash
+hazler https://example.com
+```
 
 Crawl with custom depth and concurrency:
 ```bash
@@ -223,14 +249,29 @@ Limit to 100 pages:
 hazler https://example.com -p 100
 ```
 
-Output as single JSON object:
+Get detailed statistics:
 ```bash
-hazler https://example.com -o json
+hazler https://example.com --stats
+```
+
+Generate comprehensive report with security findings:
+```bash
+hazler https://example.com --report
+```
+
+Output as single JSON object for processing:
+```bash
+hazler https://example.com -o json > results.json
+```
+
+Output as JSONL (one JSON object per line):
+```bash
+hazler https://example.com -o jsonl > results.jsonl
 ```
 
 Output as URL list:
 ```bash
-hazler https://example.com -o urls
+hazler https://example.com -o urls > urls.txt
 ```
 
 Output as CSV:
@@ -238,9 +279,9 @@ Output as CSV:
 hazler https://example.com -o csv > results.csv
 ```
 
-Output as tree structure:
+Disable stealth and secrets for faster crawling:
 ```bash
-hazler https://example.com -o tree
+hazler https://example.com --no-stealth --no-secrets
 ```
 
 Include body content (excluded by default):
@@ -250,15 +291,8 @@ hazler https://example.com --include-body
 
 Select specific fields:
 ```bash
-hazler https://example.com --fields url,status_code,depth
+hazler https://example.com --fields url,status_code,depth -o jsonl
 ```
-
-Show statistics:
-```bash
-hazler https://example.com --stats
-```
-
-Generate full report:
 ```bash
 hazler https://example.com --report
 ```
@@ -348,7 +382,29 @@ hazler https://api.target.com --aggressive --fields url,links -o json | \
 
 Hazler supports multiple output formats to suit different use cases:
 
-### JSONL (default)
+### Tree (default)
+Human-friendly tree structure with colors showing site hierarchy:
+```
+🌐 HAZLER CRAWL RESULTS
+════════════════════════════════════════════════════════════════════════════════
+
+✓ [200] https://example.com/ (10 links)
+  ✓ [200] https://example.com/page1 (5 links)
+    ✓ [200] https://example.com/page1/sub (2 links)
+  ✓ [200] https://example.com/page2 (3 links)
+  ↻ [301] https://example.com/old (0 links)
+  ✗ [404] https://example.com/missing (0 links)
+
+════════════════════════════════════════════════════════════════════════════════
+```
+
+Features:
+- ✓ Color-coded status indicators (green=success, yellow=redirect, red=error)
+- Shows link count for each page
+- Displays secrets found (if any)
+- Visual hierarchy based on crawl depth
+
+### JSONL
 Each line is a JSON object representing a crawled page:
 ```json
 {"url":"https://example.com/","status_code":200,"body":"...","headers":{...},"content_type":"text/html","links":[...],"depth":0}
@@ -362,7 +418,14 @@ Single JSON object with all results:
   "pages": [...],
   "total_pages": 10,
   "total_urls": 25,
-  "errors": []
+  "errors": [],
+  "secret_findings": {
+    "total": 5,
+    "critical": 2,
+    "high": 1,
+    "medium": 2,
+    "low": 0
+  }
 }
 ```
 
@@ -380,15 +443,6 @@ Comma-separated values with headers:
 url,status_code,depth,content_type,num_links
 "https://example.com/",200,0,"text/html",10
 "https://example.com/page1",200,1,"text/html",5
-```
-
-### Tree
-Visual tree structure showing site hierarchy:
-```
-✓ [200] https://example.com/ (10 links)
-  ✓ [200] https://example.com/page1 (5 links)
-    ✓ [200] https://example.com/page1/sub (2 links)
-  ✓ [200] https://example.com/page2 (3 links)
 ```
 
 ## Output Processing Examples
@@ -636,6 +690,24 @@ wait
 - **Use filters:** Process output with `jq` or similar tools to reduce data size
 - **Use aggressive mode wisely:** `--aggressive` generates more requests; use on targets you're authorized to test
 - **Exclude body by default:** Body content is excluded by default for performance; use `--include-body` only when needed
+- **Disable features for speed:** If you don't need stealth or secret scanning, use `--no-stealth --no-secrets` for faster crawling
+- **Use machine-readable formats:** For large crawls, use `-o jsonl` or `-o json` instead of tree format to save on terminal rendering
+
+## New Default Behavior
+
+**Hazler now defaults to human-friendly behavior:**
+- 🎨 **Tree output format** - Beautiful, colored tree view (instead of JSONL)
+- 🕵️ **Stealth mode enabled** - Better success rates with WAF evasion
+- 🔒 **Secret scanning enabled** - Automatic detection of sensitive data leaks
+
+You can disable these features if needed:
+```bash
+# Traditional machine-readable output
+hazler https://example.com -o jsonl
+
+# Disable stealth and secrets for maximum speed
+hazler https://example.com --no-stealth --no-secrets
+```
 
 ## License
 

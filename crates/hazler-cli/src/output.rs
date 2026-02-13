@@ -1,6 +1,17 @@
 use hazler_core::{CrawlResult, Page, Severity};
 use serde_json::json;
 use std::collections::HashMap;
+use colored::*;
+
+/// Color options for output formatting
+#[derive(Debug, Clone, Copy)]
+enum StatusColor {
+    Green,
+    Yellow,
+    Red,
+    BrightRed,
+    White,
+}
 
 /// Format crawl results for output
 pub struct OutputFormatter {
@@ -144,6 +155,11 @@ impl OutputFormatter {
     pub fn format_tree(&self, result: &CrawlResult) -> String {
         let mut output = String::new();
 
+        // Add a nice header
+        output.push_str(&format!("\n{}\n", "═".repeat(80).bright_blue()));
+        output.push_str(&format!("{}\n", "🌐 HAZLER CRAWL RESULTS".bright_cyan().bold()));
+        output.push_str(&format!("{}\n\n", "═".repeat(80).bright_blue()));
+
         // Group pages by depth
         let mut by_depth: HashMap<usize, Vec<&Page>> = HashMap::new();
         for page in &result.pages {
@@ -153,28 +169,47 @@ impl OutputFormatter {
         // Get max depth
         let max_depth = by_depth.keys().max().copied().unwrap_or(0);
 
-        // Print tree
+        // Print tree with colors
         for depth in 0..=max_depth {
             if let Some(pages) = by_depth.get(&depth) {
                 for page in pages {
                     let indent = "  ".repeat(depth);
-                    let status_indicator = if page.status_code == 200 {
-                        "✓"
+                    let (status_indicator, status_color) = get_status_indicator(page.status_code);
+
+                    let status_str = format!("[{}]", page.status_code);
+                    let colored_status = apply_color(&status_str, status_color);
+                    let indicator_colored = apply_color(status_indicator, status_color);
+
+                    // Show secrets indicator if any found
+                    let secrets_indicator = if !page.secrets.is_empty() {
+                        format!(" 🔒 {} secrets", page.secrets.len()).bright_red().to_string()
                     } else {
-                        "✗"
+                        String::new()
                     };
 
                     output.push_str(&format!(
-                        "{}{} [{}] {} ({} links)\n",
+                        "{}{} {} {} ({} links){}",
                         indent,
-                        status_indicator,
-                        page.status_code,
-                        page.url,
-                        page.links.len()
+                        indicator_colored,
+                        colored_status,
+                        page.url.to_string().bright_white(),
+                        page.links.len().to_string().cyan(),
+                        secrets_indicator
                     ));
+
+                    // Show content type if interesting
+                    if let Some(ref ct) = page.content_type {
+                        if !ct.starts_with("text/html") {
+                            output.push_str(&format!(" [{}]", ct.dimmed()));
+                        }
+                    }
+
+                    output.push('\n');
                 }
             }
         }
+
+        output.push_str(&format!("\n{}\n", "═".repeat(80).bright_blue()));
 
         output
     }
@@ -189,10 +224,19 @@ impl OutputFormatter {
 pub fn generate_stats(result: &CrawlResult) -> String {
     let mut output = String::new();
 
-    output.push_str("=== Crawl Statistics ===\n");
-    output.push_str(&format!("Total pages crawled: {}\n", result.total_pages));
-    output.push_str(&format!("Total URLs discovered: {}\n", result.total_urls));
-    output.push_str(&format!("Errors: {}\n", result.errors.len()));
+    output.push_str(&format!("\n{}\n", "═".repeat(80).bright_blue()));
+    output.push_str(&format!("{}\n", "📊 CRAWL STATISTICS".bright_cyan().bold()));
+    output.push_str(&format!("{}\n\n", "═".repeat(80).bright_blue()));
+
+    output.push_str(&format!("{} {}\n", "Total pages crawled:".bright_white(), result.total_pages.to_string().green().bold()));
+    output.push_str(&format!("{} {}\n", "Total URLs discovered:".bright_white(), result.total_urls.to_string().cyan().bold()));
+    output.push_str(&format!("{} {}\n", "Errors encountered:".bright_white(), 
+        if !result.errors.is_empty() {
+            result.errors.len().to_string().red().bold()
+        } else {
+            result.errors.len().to_string().green().bold()
+        }
+    ));
 
     // Status code distribution
     let mut status_codes: HashMap<u16, usize> = HashMap::new();
@@ -200,11 +244,19 @@ pub fn generate_stats(result: &CrawlResult) -> String {
         *status_codes.entry(page.status_code).or_insert(0) += 1;
     }
 
-    output.push_str("\n=== Status Code Distribution ===\n");
+    output.push_str(&format!("\n{}\n", "Status Code Distribution:".yellow().bold()));
     let mut codes: Vec<_> = status_codes.iter().collect();
     codes.sort_by_key(|(code, _)| *code);
     for (code, count) in codes {
-        output.push_str(&format!("{}: {} pages\n", code, count));
+        let code_str = format!("  {}: {} pages", code, count);
+        let colored_str = match *code {
+            200..=299 => code_str.green(),
+            300..=399 => code_str.yellow(),
+            400..=499 => code_str.red(),
+            500..=599 => code_str.bright_red(),
+            _ => code_str.white(),
+        };
+        output.push_str(&format!("{}\n", colored_str));
     }
 
     // Depth distribution
@@ -213,11 +265,11 @@ pub fn generate_stats(result: &CrawlResult) -> String {
         *depths.entry(page.depth).or_insert(0) += 1;
     }
 
-    output.push_str("\n=== Depth Distribution ===\n");
+    output.push_str(&format!("\n{}\n", "Depth Distribution:".yellow().bold()));
     let mut depth_list: Vec<_> = depths.iter().collect();
     depth_list.sort_by_key(|(depth, _)| *depth);
     for (depth, count) in depth_list {
-        output.push_str(&format!("Depth {}: {} pages\n", depth, count));
+        output.push_str(&format!("  {}: {} pages\n", format!("Depth {}", depth).cyan(), count));
     }
 
     // Content type distribution
@@ -230,12 +282,14 @@ pub fn generate_stats(result: &CrawlResult) -> String {
         *content_types.entry(ct).or_insert(0) += 1;
     }
 
-    output.push_str("\n=== Content Type Distribution ===\n");
+    output.push_str(&format!("\n{}\n", "Content Type Distribution:".yellow().bold()));
     let mut ct_list: Vec<_> = content_types.iter().collect();
     ct_list.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
     for (ct, count) in ct_list.iter().take(10) {
-        output.push_str(&format!("{}: {} pages\n", ct, count));
+        output.push_str(&format!("  {}: {} pages\n", ct.cyan(), count));
     }
+
+    output.push_str(&format!("\n{}\n", "═".repeat(80).bright_blue()));
 
     output
 }
@@ -428,5 +482,27 @@ fn truncate_string(s: &str, max_len: usize) -> String {
         s.to_string()
     } else {
         format!("{}...", &s[..max_len])
+    }
+}
+
+/// Get status indicator and color for a given HTTP status code
+fn get_status_indicator(status_code: u16) -> (&'static str, StatusColor) {
+    match status_code {
+        200..=299 => ("✓", StatusColor::Green),
+        300..=399 => ("↻", StatusColor::Yellow),
+        400..=499 => ("✗", StatusColor::Red),
+        500..=599 => ("⚠", StatusColor::BrightRed),
+        _ => ("?", StatusColor::White),
+    }
+}
+
+/// Apply color to a string based on StatusColor enum
+fn apply_color(text: &str, color: StatusColor) -> colored::ColoredString {
+    match color {
+        StatusColor::Green => text.green(),
+        StatusColor::Yellow => text.yellow(),
+        StatusColor::Red => text.red(),
+        StatusColor::BrightRed => text.bright_red(),
+        StatusColor::White => text.white(),
     }
 }

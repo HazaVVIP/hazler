@@ -48,7 +48,7 @@ impl Crawler {
         let frame_parser = FrameFileParser::new()
             .map_err(|e| anyhow::anyhow!("Failed to create frame parser: {}", e))?;
         let url_normalizer = AdvancedUrlNormalizer::new();
-        
+
         // Initialize secret scanner if secrets scanning is enabled
         let secret_scanner = if config.secrets_scanning {
             Some(SecretScanner::new())
@@ -278,7 +278,12 @@ impl Crawler {
         });
 
         // Create page object
-        let mut page = Page::new(url.clone(), response.status_code, response.body.clone(), depth);
+        let mut page = Page::new(
+            url.clone(),
+            response.status_code,
+            response.body.clone(),
+            depth,
+        );
         page.headers = response.headers;
         page.content_type = response.content_type;
         page.links = links.clone();
@@ -287,11 +292,7 @@ impl Crawler {
         if let Some(ref scanner) = context.secret_scanner {
             let findings = scanner.scan(&response.body, url.as_str());
             if !findings.is_empty() {
-                info!(
-                    "Found {} secret(s) at {}",
-                    findings.len(),
-                    url
-                );
+                info!("Found {} secret(s) at {}", findings.len(), url);
                 // Convert hazler_secrets::Finding to our Finding type
                 page.secrets = findings
                     .into_iter()

@@ -103,7 +103,9 @@ impl JavaScriptParser {
         // Detect frameworks and apply framework-specific patterns
         let frameworks = detect_framework(js_content);
         for framework in &frameworks {
-            if let Some(framework_endpoints) = self.extract_framework_endpoints(js_content, base_url, framework) {
+            if let Some(framework_endpoints) =
+                self.extract_framework_endpoints(js_content, base_url, framework)
+            {
                 endpoints.extend(framework_endpoints);
             }
         }
@@ -112,14 +114,19 @@ impl JavaScriptParser {
     }
 
     /// Extract endpoints using framework-specific patterns
-    fn extract_framework_endpoints(&self, js_content: &str, base_url: &Url, framework: &Framework) -> Option<Vec<Url>> {
+    fn extract_framework_endpoints(
+        &self,
+        js_content: &str,
+        base_url: &Url,
+        framework: &Framework,
+    ) -> Option<Vec<Url>> {
         let patterns = get_framework_patterns(framework);
         if patterns.is_empty() {
             return None;
         }
 
         let mut endpoints = Vec::new();
-        
+
         for pattern_str in patterns {
             if let Ok(pattern) = Regex::new(&pattern_str) {
                 for cap in pattern.captures_iter(js_content) {

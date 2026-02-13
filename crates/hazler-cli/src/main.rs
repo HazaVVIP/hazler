@@ -1,9 +1,9 @@
 use clap::Parser;
+use colored::Colorize;
 use hazler_core::{Config, Crawler};
 use std::process;
 use tracing::{error, Level};
 use url::Url;
-use colored::Colorize;
 
 mod output;
 use output::{generate_report, generate_stats, OutputFormatter};
@@ -131,12 +131,26 @@ async fn main() {
     // Apply --all mode defaults if enabled
     let (max_depth, max_pages, aggressive, enable_secrets, enable_stealth) = if args.all {
         // --all mode: comprehensive scanning
-        let depth = if args.max_depth == 3 { 5 } else { args.max_depth }; // Increase depth if using default
-        let pages = if args.max_pages == 0 { 0 } else { args.max_pages }; // Keep unlimited or user value
+        let depth = if args.max_depth == 3 {
+            5
+        } else {
+            args.max_depth
+        }; // Increase depth if using default
+        let pages = if args.max_pages == 0 {
+            0
+        } else {
+            args.max_pages
+        }; // Keep unlimited or user value
         (depth, pages, true, true, !args.no_stealth) // Force aggressive mode, enable secrets
     } else {
         // Normal mode: stealth and secrets are enabled by default (can be disabled with flags)
-        (args.max_depth, args.max_pages, args.aggressive, !args.no_secrets, !args.no_stealth)
+        (
+            args.max_depth,
+            args.max_pages,
+            args.aggressive,
+            !args.no_secrets,
+            !args.no_stealth,
+        )
     };
 
     // Configure the crawler
@@ -224,9 +238,19 @@ async fn main() {
                 eprintln!("\n{}", "═".repeat(80).bright_blue());
                 eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
                 eprintln!("{}", "═".repeat(80).bright_blue());
-                eprintln!("{} {}", "Total pages crawled:".bright_white(), result.total_pages.to_string().green().bold());
-                eprintln!("{} {}", "Total URLs discovered:".bright_white(), result.total_urls.to_string().cyan().bold());
-                eprintln!("{} {}", "Errors encountered:".bright_white(), 
+                eprintln!(
+                    "{} {}",
+                    "Total pages crawled:".bright_white(),
+                    result.total_pages.to_string().green().bold()
+                );
+                eprintln!(
+                    "{} {}",
+                    "Total URLs discovered:".bright_white(),
+                    result.total_urls.to_string().cyan().bold()
+                );
+                eprintln!(
+                    "{} {}",
+                    "Errors encountered:".bright_white(),
                     if !result.errors.is_empty() {
                         result.errors.len().to_string().red().bold()
                     } else {
@@ -237,7 +261,11 @@ async fn main() {
                 // Show secrets summary if any found
                 if let Some(ref stats) = result.secret_findings {
                     if stats.total > 0 {
-                        eprintln!("\n{} {}", "🔒 Secrets found:".bright_red().bold(), stats.total.to_string().bright_red().bold());
+                        eprintln!(
+                            "\n{} {}",
+                            "🔒 Secrets found:".bright_red().bold(),
+                            stats.total.to_string().bright_red().bold()
+                        );
                         if stats.critical > 0 {
                             eprintln!("  {} {}", "Critical:".red(), stats.critical);
                         }

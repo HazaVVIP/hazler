@@ -55,9 +55,8 @@ pub struct SecretScanner {
 impl SecretScanner {
     /// Create a new secret scanner
     pub fn new() -> Self {
-        let patterns = patterns::compile_patterns()
-            .expect("Failed to compile secret patterns");
-        
+        let patterns = patterns::compile_patterns().expect("Failed to compile secret patterns");
+
         SecretScanner { patterns }
     }
 
@@ -80,15 +79,15 @@ impl SecretScanner {
                 if let Some(captures) = pattern.captures(line) {
                     let matched = captures.get(0).unwrap();
                     let matched_text = matched.as_str();
-                    
+
                     // Get context (up to 50 chars before and after)
                     let start = matched.start().saturating_sub(50);
                     let end = (matched.end() + 50).min(line.len());
                     let context = &line[start..end];
-                    
+
                     // Redact sensitive parts of the matched text
                     let redacted = Self::redact_sensitive(matched_text, name);
-                    
+
                     findings.push(Finding {
                         secret_type: name.clone(),
                         severity: Severity::from(severity.as_str()),
@@ -110,10 +109,14 @@ impl SecretScanner {
     fn redact_sensitive(text: &str, pattern_name: &str) -> String {
         // For high-sensitivity patterns, redact most of the value
         match pattern_name {
-            name if name.contains("Secret") || name.contains("Private") || name.contains("Password") => {
+            name if name.contains("Secret")
+                || name.contains("Private")
+                || name.contains("Password") =>
+            {
                 let chars: Vec<char> = text.chars().collect();
                 if chars.len() > 8 {
-                    format!("{}...{}", 
+                    format!(
+                        "{}...{}",
                         chars.iter().take(4).collect::<String>(),
                         chars.iter().skip(chars.len() - 4).collect::<String>()
                     )
@@ -125,7 +128,8 @@ impl SecretScanner {
                 // For other patterns, show a bit more
                 let chars: Vec<char> = text.chars().collect();
                 if chars.len() > 12 {
-                    format!("{}...{}", 
+                    format!(
+                        "{}...{}",
                         chars.iter().take(6).collect::<String>(),
                         chars.iter().skip(chars.len() - 6).collect::<String>()
                     )
@@ -147,7 +151,7 @@ impl SecretScanner {
     /// Get statistics about findings by severity
     pub fn get_stats(findings: &[Finding]) -> FindingStats {
         let mut stats = FindingStats::default();
-        
+
         for finding in findings {
             match finding.severity {
                 Severity::Critical => stats.critical += 1,
@@ -156,7 +160,7 @@ impl SecretScanner {
                 Severity::Low => stats.low += 1,
             }
         }
-        
+
         stats.total = findings.len();
         stats
     }
@@ -193,7 +197,7 @@ mod tests {
         let scanner = SecretScanner::new();
         let code = "const AWS_KEY = 'AKIA1234567890ABCDEF';";
         let findings = scanner.scan(code, "test.js");
-        
+
         assert!(!findings.is_empty());
         let aws_finding = findings.iter().find(|f| f.secret_type.contains("AWS"));
         assert!(aws_finding.is_some());
@@ -204,7 +208,7 @@ mod tests {
         let scanner = SecretScanner::new();
         let code = "token = 'ghp_1234567890abcdefABCDEF1234567890ab'";
         let findings = scanner.scan(code, "config.js");
-        
+
         assert!(!findings.is_empty());
         assert!(findings[0].secret_type.contains("GitHub"));
     }
@@ -214,7 +218,7 @@ mod tests {
         let scanner = SecretScanner::new();
         let code = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
         let findings = scanner.scan(code, "api.js");
-        
+
         assert!(!findings.is_empty());
         assert!(findings.iter().any(|f| f.secret_type.contains("JWT")));
     }
@@ -224,7 +228,7 @@ mod tests {
         let scanner = SecretScanner::new();
         let code = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...";
         let findings = scanner.scan(code, "key.pem");
-        
+
         assert!(!findings.is_empty());
         assert!(findings[0].severity == Severity::Critical);
     }
@@ -234,9 +238,11 @@ mod tests {
         let scanner = SecretScanner::new();
         let code = "const API_URL = 'http://192.168.1.100:8080/api';";
         let findings = scanner.scan(code, "config.js");
-        
+
         assert!(!findings.is_empty());
-        assert!(findings.iter().any(|f| f.secret_type.contains("Internal IP")));
+        assert!(findings
+            .iter()
+            .any(|f| f.secret_type.contains("Internal IP")));
     }
 
     #[test]
@@ -248,7 +254,7 @@ mod tests {
         "#;
         let all_findings = scanner.scan(code, "test.js");
         let high_findings = scanner.scan_high_severity(code, "test.js");
-        
+
         // Should have both findings in all_findings
         assert!(all_findings.len() >= 2);
         // high_findings should only have AWS key (critical/high)
@@ -289,7 +295,7 @@ mod tests {
                 location: "test".to_string(),
             },
         ];
-        
+
         let stats = SecretScanner::get_stats(&findings);
         assert_eq!(stats.total, 3);
         assert_eq!(stats.critical, 1);

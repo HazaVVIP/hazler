@@ -1,0 +1,31 @@
+# Git
+.git
+.gitignore
+
+# Target directory
+target/
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+tests/
+*.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Audit files
+AUDIT_*.md
+AUDIT_*.txt
+hazler-audit.md
+IMPLEMENTATION_SUMMARY.md
+any.bak

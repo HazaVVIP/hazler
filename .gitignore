@@ -1,0 +1,19 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Cargo - Keep Cargo.lock for binaries but ignore for libraries
+# For this workspace, we'll include it since we have a binary
+# Cargo.lock
+
+# Debug
+*.log

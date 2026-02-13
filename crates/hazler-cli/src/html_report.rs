@@ -13,27 +13,25 @@ const MAX_DISPLAYED_ENDPOINTS: usize = 100;
 /// Generate an HTML report from crawl results
 pub fn generate_html_report(result: &CrawlResult, output_path: &Path) -> anyhow::Result<()> {
     let html = build_html_report(result);
-    
+
     let mut file = File::create(output_path)?;
     file.write_all(html.as_bytes())?;
-    
+
     Ok(())
 }
 
 /// Build the HTML report content
 fn build_html_report(result: &CrawlResult) -> String {
     let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
-    
+
     // Calculate statistics
-    let total_secrets = result.pages.iter()
-        .map(|p| p.secrets.len())
-        .sum::<usize>();
-    
+    let total_secrets = result.pages.iter().map(|p| p.secrets.len()).sum::<usize>();
+
     let mut critical_secrets = 0;
     let mut high_secrets = 0;
     let mut medium_secrets = 0;
     let mut low_secrets = 0;
-    
+
     for page in &result.pages {
         for secret in &page.secrets {
             match secret.severity {
@@ -44,7 +42,7 @@ fn build_html_report(result: &CrawlResult) -> String {
             }
         }
     }
-    
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -317,7 +315,13 @@ fn build_html_report(result: &CrawlResult) -> String {
         result.total_urls,
         total_secrets,
         critical_secrets,
-        build_secrets_section(result, critical_secrets, high_secrets, medium_secrets, low_secrets),
+        build_secrets_section(
+            result,
+            critical_secrets,
+            high_secrets,
+            medium_secrets,
+            low_secrets
+        ),
         build_pages_section(result),
         build_endpoints_section(result),
         timestamp
@@ -333,12 +337,14 @@ fn build_secrets_section(
     low: usize,
 ) -> String {
     if critical + high + medium + low == 0 {
-        return String::from(r#"
+        return String::from(
+            r#"
         <h2>🔒 Secret Findings</h2>
         <p style="color: #27ae60; font-weight: bold;">✓ No secrets detected</p>
-        "#);
+        "#,
+        );
     }
-    
+
     let mut html = format!(
         r#"
         <h2>🔒 Secret Findings</h2>
@@ -363,14 +369,14 @@ fn build_secrets_section(
         "#,
         critical, high, medium, low
     );
-    
+
     // Add detailed findings
     html.push_str("<h3>Detailed Findings</h3>");
-    
+
     for page in &result.pages {
         if !page.secrets.is_empty() {
             html.push_str(&format!(r#"<h4>📄 {}</h4>"#, page.url));
-            
+
             for finding in &page.secrets {
                 let severity_class = match finding.severity {
                     Severity::Critical => "critical",
@@ -378,14 +384,14 @@ fn build_secrets_section(
                     Severity::Medium => "medium",
                     Severity::Low => "low",
                 };
-                
+
                 let severity_label = match finding.severity {
                     Severity::Critical => "CRITICAL",
                     Severity::High => "HIGH",
                     Severity::Medium => "MEDIUM",
                     Severity::Low => "LOW",
                 };
-                
+
                 html.push_str(&format!(
                     r#"
                     <div class="secret-card {}">
@@ -407,13 +413,14 @@ fn build_secrets_section(
             }
         }
     }
-    
+
     html
 }
 
 /// Build the crawled pages section
 fn build_pages_section(result: &CrawlResult) -> String {
-    let mut html = String::from(r#"
+    let mut html = String::from(
+        r#"
         <h2>📄 Crawled Pages</h2>
         <table>
             <thead>
@@ -426,8 +433,9 @@ fn build_pages_section(result: &CrawlResult) -> String {
                 </tr>
             </thead>
             <tbody>
-    "#);
-    
+    "#,
+    );
+
     for page in &result.pages {
         let status_class = match page.status_code {
             200..=299 => "status-200",
@@ -435,7 +443,7 @@ fn build_pages_section(result: &CrawlResult) -> String {
             400..=499 => "status-400",
             _ => "status-500",
         };
-        
+
         html.push_str(&format!(
             r#"
                 <tr>
@@ -446,7 +454,7 @@ fn build_pages_section(result: &CrawlResult) -> String {
                     <td>{}</td>
                 </tr>
             "#,
-            html_escape(&page.url.to_string()),
+            html_escape(page.url.as_ref()),
             status_class,
             page.status_code,
             page.depth,
@@ -454,21 +462,23 @@ fn build_pages_section(result: &CrawlResult) -> String {
             page.secrets.len()
         ));
     }
-    
+
     html.push_str("</tbody></table>");
     html
 }
 
 /// Build the discovered endpoints section
 fn build_endpoints_section(result: &CrawlResult) -> String {
-    let mut all_links: Vec<String> = result.pages.iter()
+    let mut all_links: Vec<String> = result
+        .pages
+        .iter()
         .flat_map(|p| p.links.iter())
         .map(|u| u.to_string())
         .collect();
-    
+
     all_links.sort();
     all_links.dedup();
-    
+
     let mut html = format!(
         r#"
         <h2>🔗 Discovered Endpoints</h2>
@@ -477,7 +487,7 @@ fn build_endpoints_section(result: &CrawlResult) -> String {
         "#,
         all_links.len()
     );
-    
+
     for (i, link) in all_links.iter().enumerate() {
         if i < MAX_DISPLAYED_ENDPOINTS {
             html.push_str(&format!(
@@ -486,14 +496,14 @@ fn build_endpoints_section(result: &CrawlResult) -> String {
             ));
         }
     }
-    
+
     if all_links.len() > MAX_DISPLAYED_ENDPOINTS {
         html.push_str(&format!(
             r#"<li class="endpoint-item"><em>... and {} more endpoints</em></li>"#,
             all_links.len() - MAX_DISPLAYED_ENDPOINTS
         ));
     }
-    
+
     html.push_str("</ul>");
     html
 }
@@ -510,15 +520,15 @@ fn html_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hazler_core::{Page, CrawlResult};
+    use hazler_core::{CrawlResult, Page};
     use url::Url;
-    
+
     #[test]
     fn test_html_escape() {
         assert_eq!(html_escape("<script>"), "&lt;script&gt;");
         assert_eq!(html_escape("foo & bar"), "foo &amp; bar");
     }
-    
+
     #[test]
     fn test_build_html_report() {
         let mut result = CrawlResult::new();
@@ -527,7 +537,7 @@ mod tests {
         result.pages.push(page);
         result.total_pages = 1;
         result.total_urls = 1;
-        
+
         let html = build_html_report(&result);
         assert!(html.contains("Hazler Crawl Report"));
         assert!(html.contains("example.com"));

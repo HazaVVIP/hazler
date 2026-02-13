@@ -1,9 +1,9 @@
 use crate::config::Config;
+use crate::noise_filter::NoiseFilter;
 use crate::normalizer::AdvancedUrlNormalizer;
 use crate::queue::UrlQueue;
 use crate::scope::ScopeValidator;
 use crate::types::{CrawlResult, Finding, FindingStats, Page, Severity};
-use crate::noise_filter::NoiseFilter;
 use hazler_http::HttpClient;
 use hazler_js_parser::{FrameFileParser, JavaScriptParser};
 use hazler_parser::HtmlParser;
@@ -75,10 +75,10 @@ impl Crawler {
 
         let mut queue = UrlQueue::new();
         let mut result = CrawlResult::new();
-        
+
         // Configure scope validator based on config settings
         let mut scope_validator = ScopeValidator::new(&start_url);
-        
+
         // Configure scope behavior:
         // - If strict_domain is enabled: only exact domain (no subdomains)
         // - Otherwise, if allow_subdomains is enabled: include subdomains

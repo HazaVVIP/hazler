@@ -311,12 +311,20 @@ mod tests {
         let aws_test = "AKIA1234567890ABCDEF";
         let gh_test = "ghp_1234567890abcdefABCDEF1234567890ab";
         let stripe_test = format!("sk_live_{}", "12345678901234567890abcd");
-        let minified = format!(r#"const a="{}",b="{}",c="{}";"#, aws_test, gh_test, stripe_test);
+        let minified = format!(
+            r#"const a="{}",b="{}",c="{}";"#,
+            aws_test, gh_test, stripe_test
+        );
         let findings = scanner.scan(&minified, "minified.js");
 
         // Should find exactly 3 secrets (AWS key, GitHub token, Stripe key)
-        assert_eq!(findings.len(), 3, "Expected exactly 3 findings, got {}", findings.len());
-        
+        assert_eq!(
+            findings.len(),
+            3,
+            "Expected exactly 3 findings, got {}",
+            findings.len()
+        );
+
         // Verify each secret type is found
         assert!(findings.iter().any(|f| f.secret_type.contains("AWS")));
         assert!(findings.iter().any(|f| f.secret_type.contains("GitHub")));
@@ -332,7 +340,11 @@ mod tests {
         let findings = scanner.scan(code, "test.js");
 
         // Should find at least AWS and GitHub tokens (may find more generic patterns)
-        assert!(findings.len() >= 2, "Expected at least 2 findings, got {}", findings.len());
+        assert!(
+            findings.len() >= 2,
+            "Expected at least 2 findings, got {}",
+            findings.len()
+        );
         assert!(findings.iter().any(|f| f.secret_type.contains("AWS")));
         assert!(findings.iter().any(|f| f.secret_type.contains("GitHub")));
     }
@@ -345,7 +357,11 @@ mod tests {
         let findings = scanner.scan(html, "minified.html");
 
         // Should find exactly AWS key and JWT token
-        assert_eq!(findings.len(), 2, "Expected exactly 2 findings in minified HTML");
+        assert_eq!(
+            findings.len(),
+            2,
+            "Expected exactly 2 findings in minified HTML"
+        );
         assert!(findings.iter().any(|f| f.secret_type.contains("AWS")));
         assert!(findings.iter().any(|f| f.secret_type.contains("JWT")));
     }

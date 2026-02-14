@@ -1,0 +1,248 @@
+#!/usr/bin/env bpftrace
+
+/*
+ * Hazler Performance Profiler - eBPF/bpftrace
+ * 
+ * This script profiles Hazler's performance, tracking CPU usage,
+ * memory allocations, and function call latencies.
+ * 
+ * Usage:
+ *   sudo bpftrace hazler-perf.bt
+ *   sudo bpftrace hazler-perf.bt -c "hazler https://example.com"
+ */
+
+BEGIN
+{
+    printf("⚡ Hazler Performance Profiler Started\n");
+    printf("Monitoring performance metrics for Hazler...\n");
+    printf("%-10s %-20s %-15s %-10s %s\n", "TIME", "PROCESS", "EVENT", "PID", "DETAILS");
+}
+
+// Track CPU scheduling
+tracepoint:sched:sched_switch
+/(prev_comm == "hazler" || prev_comm == "hazler-cli") && prev_state == TASK_RUNNING/
+{
+    @cpu_time[prev_pid] = hist(nsecs - @on_cpu[prev_pid]);
+    @context_switches[prev_pid]++;
+}
+
+tracepoint:sched:sched_switch
+/next_comm == "hazler" || next_comm == "hazler-cli"/
+{
+    @on_cpu[next_pid] = nsecs;
+}
+
+// Track memory allocations (malloc/free)
+uprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @malloc_calls++;
+    @malloc_size = sum(arg0);
+    @malloc_hist = hist(arg0);
+    
+    if (arg0 > 1048576) {  // > 1MB
+        printf("%-10u %-20s %-15s %-10d Size: %.2f MB\n",
+            elapsed / 1000000,
+            comm,
+            "LARGE_ALLOC",
+            pid,
+            arg0 / 1024.0 / 1024.0
+        );
+    }
+    
+    @alloc_start[tid] = nsecs;
+}
+
+uretprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
+/@alloc_start[tid]/
+{
+    $duration = nsecs - @alloc_start[tid];
+    @malloc_duration = hist($duration);
+    delete(@alloc_start[tid]);
+}
+
+uprobe:/lib/x86_64-linux-gnu/libc.so.6:free
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @free_calls++;
+}
+
+// Track thread creation
+tracepoint:syscalls:sys_enter_clone
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    printf("%-10u %-20s %-15s %-10d Creating new thread\n",
+        elapsed / 1000000,
+        comm,
+        "THREAD_CREATE",
+        pid
+    );
+    
+    @threads_created++;
+}
+
+// Track file operations
+tracepoint:syscalls:sys_enter_openat
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @file_opens++;
+    printf("%-10u %-20s %-15s %-10d File: %s\n",
+        elapsed / 1000000,
+        comm,
+        "FILE_OPEN",
+        pid,
+        str(args->filename)
+    );
+}
+
+tracepoint:syscalls:sys_enter_read
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @file_reads++;
+    @read_start[tid] = nsecs;
+}
+
+tracepoint:syscalls:sys_exit_read
+/@read_start[tid] && retval > 0/
+{
+    $duration = nsecs - @read_start[tid];
+    @read_bytes = sum(retval);
+    @read_duration = hist($duration / 1000);  // microseconds
+    
+    delete(@read_start[tid]);
+}
+
+tracepoint:syscalls:sys_enter_write
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @file_writes++;
+    @write_start[tid] = nsecs;
+}
+
+tracepoint:syscalls:sys_exit_write
+/@write_start[tid] && retval > 0/
+{
+    $duration = nsecs - @write_start[tid];
+    @write_bytes = sum(retval);
+    @write_duration = hist($duration / 1000);  // microseconds
+    
+    delete(@write_start[tid]);
+}
+
+// Track futex operations (lock contention)
+tracepoint:syscalls:sys_enter_futex
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @futex_ops++;
+    @futex_start[tid] = nsecs;
+}
+
+tracepoint:syscalls:sys_exit_futex
+/@futex_start[tid]/
+{
+    $duration = nsecs - @futex_start[tid];
+    
+    if ($duration > 1000000) {  // > 1ms
+        printf("%-10u %-20s %-15s %-10d Duration: %d ms (SLOW LOCK)\n",
+            elapsed / 1000000,
+            comm,
+            "LOCK_WAIT",
+            pid,
+            $duration / 1000000
+        );
+    }
+    
+    @futex_duration = hist($duration / 1000);  // microseconds
+    delete(@futex_start[tid]);
+}
+
+// Track page faults
+software:page-faults:1
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @page_faults[comm]++;
+}
+
+// Track CPU cycles
+hardware:cpu-cycles:1000000
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @cpu_samples[comm]++;
+}
+
+// 5-second interval statistics
+interval:s:5
+{
+    time("%H:%M:%S ");
+    printf("📊 Memory: malloc=%d free=%d, I/O: reads=%d writes=%d, Threads: %d\n",
+        @malloc_calls,
+        @free_calls,
+        @file_reads,
+        @file_writes,
+        @threads_created
+    );
+}
+
+END
+{
+    printf("\n");
+    printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    printf("⚡ Hazler Performance Profiler - Final Statistics\n");
+    printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    
+    printf("\n💾 Memory Management:\n");
+    printf("  Malloc calls:         %d\n", @malloc_calls);
+    printf("  Free calls:           %d\n", @free_calls);
+    printf("  Memory leak suspect:  %d allocations\n", @malloc_calls - @free_calls);
+    printf("  Total allocated:      %.2f MB\n", @malloc_size / 1024.0 / 1024.0);
+    
+    if (@malloc_hist) {
+        printf("\n  Allocation sizes:\n");
+        print(@malloc_hist);
+    }
+    
+    printf("\n📁 File I/O:\n");
+    printf("  File opens:           %d\n", @file_opens);
+    printf("  Read operations:      %d\n", @file_reads);
+    printf("  Bytes read:           %.2f MB\n", @read_bytes / 1024.0 / 1024.0);
+    printf("  Write operations:     %d\n", @file_writes);
+    printf("  Bytes written:        %.2f MB\n", @write_bytes / 1024.0 / 1024.0);
+    
+    if (@read_duration) {
+        printf("\n  Read latency (μs):\n");
+        print(@read_duration);
+    }
+    
+    printf("\n🧵 Concurrency:\n");
+    printf("  Threads created:      %d\n", @threads_created);
+    printf("  Futex operations:     %d\n", @futex_ops);
+    
+    if (@futex_duration) {
+        printf("\n  Lock contention (μs):\n");
+        print(@futex_duration);
+    }
+    
+    if (@page_faults) {
+        printf("\n💥 Page Faults:\n");
+        print(@page_faults);
+    }
+    
+    if (@cpu_samples) {
+        printf("\n🔥 CPU Samples:\n");
+        print(@cpu_samples);
+    }
+    
+    if (@context_switches) {
+        printf("\n🔄 Context Switches:\n");
+        print(@context_switches);
+    }
+    
+    printf("\n");
+    
+    // Cleanup
+    clear(@on_cpu);
+    clear(@alloc_start);
+    clear(@read_start);
+    clear(@write_start);
+    clear(@futex_start);
+}

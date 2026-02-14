@@ -18,6 +18,11 @@ hazler-http = { path = "../hazler-http" }
 hazler-parser = { path = "../hazler-parser" }
 hazler-js-parser = { path = "../hazler-js-parser" }
 hazler-secrets = { path = "../hazler-secrets" }
+hazler-browser = { path = "../hazler-browser", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+
+[features]
+default = []
+browser = ["hazler-browser"]

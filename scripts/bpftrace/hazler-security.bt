@@ -1,0 +1,307 @@
+#!/usr/bin/env bpftrace
+
+/*
+ * Hazler Security Monitor - eBPF/bpftrace
+ * 
+ * This script monitors security-relevant events during Hazler execution,
+ * including unusual network patterns, suspicious system calls, and potential issues.
+ * 
+ * Usage:
+ *   sudo bpftrace hazler-security.bt
+ *   sudo bpftrace hazler-security.bt -c "hazler https://example.com"
+ */
+
+BEGIN
+{
+    printf("🛡️  Hazler Security Monitor Started\n");
+    printf("Monitoring security events for Hazler...\n");
+    printf("%-10s %-20s %-20s %-10s %s\n", "TIME", "PROCESS", "EVENT", "PID", "DETAILS");
+    
+    // Suspicious ports (common backdoor ports)
+    @suspicious_ports[31337] = 1;
+    @suspicious_ports[12345] = 1;
+    @suspicious_ports[54321] = 1;
+    @suspicious_ports[1337] = 1;
+}
+
+// Monitor outbound connections to suspicious ports
+tracepoint:syscalls:sys_enter_connect
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    $sa = (struct sockaddr *)args->uservaddr;
+    
+    if ($sa->sa_family == AF_INET) {
+        $s = (struct sockaddr_in *)args->uservaddr;
+        $port = ($s->sin_port >> 8) | (($s->sin_port << 8) & 0xff00);
+        
+        if (@suspicious_ports[$port]) {
+            printf("%-10u %-20s %-20s %-10d ⚠️  Suspicious port: %d\n",
+                elapsed / 1000000,
+                comm,
+                "SUSPICIOUS_PORT",
+                pid,
+                $port
+            );
+            
+            @security_alerts++;
+        }
+        
+        // Track unique destination IPs
+        @dest_ips[ntop(AF_INET, $s->sin_addr.s_addr)]++;
+        
+        // Alert on too many unique destinations
+        if (@dest_ips[ntop(AF_INET, $s->sin_addr.s_addr)] == 1) {
+            @unique_destinations++;
+            
+            if (@unique_destinations > 100) {
+                printf("%-10u %-20s %-20s %-10d ⚠️  High connection diversity: %d destinations\n",
+                    elapsed / 1000000,
+                    comm,
+                    "HIGH_DIVERSITY",
+                    pid,
+                    @unique_destinations
+                );
+            }
+        }
+    }
+}
+
+// Monitor file access patterns
+tracepoint:syscalls:sys_enter_openat
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    $filename = str(args->filename);
+    
+    // Check for access to sensitive files
+    if ($filename == "/etc/passwd" || 
+        $filename == "/etc/shadow" || 
+        $filename == "/root/.ssh/id_rsa" ||
+        $filename == "/etc/shadow-") {
+        
+        printf("%-10u %-20s %-20s %-10d ⚠️  Sensitive file: %s\n",
+            elapsed / 1000000,
+            comm,
+            "SENSITIVE_FILE",
+            pid,
+            $filename
+        );
+        
+        @security_alerts++;
+    }
+    
+    // Track files accessed
+    @files_accessed[$filename]++;
+}
+
+// Monitor process execution
+tracepoint:syscalls:sys_enter_execve
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    printf("%-10u %-20s %-20s %-10d ⚠️  Exec: %s\n",
+        elapsed / 1000000,
+        comm,
+        "PROCESS_EXEC",
+        pid,
+        str(args->filename)
+    );
+    
+    @processes_executed++;
+    @security_alerts++;
+}
+
+// Monitor privilege escalation attempts
+tracepoint:syscalls:sys_enter_setuid
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    printf("%-10u %-20s %-20s %-10d ⚠️  CRITICAL: setuid(%d)\n",
+        elapsed / 1000000,
+        comm,
+        "SETUID_ATTEMPT",
+        pid,
+        args->uid
+    );
+    
+    @privilege_escalation++;
+    @security_alerts++;
+}
+
+tracepoint:syscalls:sys_enter_setgid
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    printf("%-10u %-20s %-20s %-10d ⚠️  CRITICAL: setgid(%d)\n",
+        elapsed / 1000000,
+        comm,
+        "SETGID_ATTEMPT",
+        pid,
+        args->gid
+    );
+    
+    @privilege_escalation++;
+    @security_alerts++;
+}
+
+// Monitor ptrace (debugging/injection)
+tracepoint:syscalls:sys_enter_ptrace
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    printf("%-10u %-20s %-20s %-10d ⚠️  CRITICAL: ptrace detected\n",
+        elapsed / 1000000,
+        comm,
+        "PTRACE_ATTEMPT",
+        pid
+    );
+    
+    @ptrace_attempts++;
+    @security_alerts++;
+}
+
+// Monitor network send patterns (data exfiltration detection)
+tracepoint:syscalls:sys_enter_sendto
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @total_bytes_sent = sum(args->len);
+    
+    // Alert on large single transfers
+    if (args->len > 10485760) {  // > 10MB
+        printf("%-10u %-20s %-20s %-10d ⚠️  Large transfer: %.2f MB\n",
+            elapsed / 1000000,
+            comm,
+            "LARGE_TRANSFER",
+            pid,
+            args->len / 1024.0 / 1024.0
+        );
+        
+        @large_transfers++;
+    }
+}
+
+// Monitor DNS queries for suspicious domains
+tracepoint:syscalls:sys_enter_sendto
+/((comm == "hazler" || comm == "hazler-cli") && args->len > 0)/
+{
+    @dns_query_count++;
+}
+
+// Monitor rate of connections (potential DDoS pattern)
+tracepoint:syscalls:sys_enter_connect
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @connections_per_second = count();
+}
+
+interval:s:1
+{
+    if (@connections_per_second > 100) {
+        printf("%-10u %-20s %-20s %-10s ⚠️  High connection rate: %d/sec\n",
+            elapsed / 1000000,
+            "hazler",
+            "HIGH_CONN_RATE",
+            "-",
+            @connections_per_second
+        );
+        
+        @rate_alerts++;
+    }
+    
+    @connections_per_second = 0;
+}
+
+// Monitor SSL certificate validation (potential MITM)
+uprobe:/usr/lib/x86_64-linux-gnu/libssl.so.3:SSL_get_verify_result
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @ssl_verifications++;
+}
+
+uretprobe:/usr/lib/x86_64-linux-gnu/libssl.so.3:SSL_get_verify_result
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    if (retval != 0) {  // X509_V_OK is 0
+        printf("%-10u %-20s %-20s %-10d ⚠️  SSL verification failed: code %d\n",
+            elapsed / 1000000,
+            comm,
+            "SSL_VERIFY_FAIL",
+            pid,
+            retval
+        );
+        
+        @ssl_verify_failures++;
+        @security_alerts++;
+    }
+}
+
+// 10-second security summary
+interval:s:10
+{
+    if (@security_alerts > 0) {
+        time("%H:%M:%S ");
+        printf("🛡️  Security Summary: %d alerts, %d unique destinations, %d DNS queries\n",
+            @security_alerts,
+            @unique_destinations,
+            @dns_query_count
+        );
+    }
+}
+
+END
+{
+    printf("\n");
+    printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    printf("🛡️  Hazler Security Monitor - Final Report\n");
+    printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    
+    printf("\n📊 Overall Security Score:\n");
+    if (@security_alerts == 0) {
+        printf("  ✅ CLEAN - No security alerts detected\n");
+    } else if (@security_alerts < 5) {
+        printf("  ⚠️  LOW RISK - %d minor alerts\n", @security_alerts);
+    } else if (@security_alerts < 20) {
+        printf("  ⚠️  MEDIUM RISK - %d alerts detected\n", @security_alerts);
+    } else {
+        printf("  🚨 HIGH RISK - %d alerts detected!\n", @security_alerts);
+    }
+    
+    printf("\n🔍 Network Security:\n");
+    printf("  Unique destinations:  %d\n", @unique_destinations);
+    printf("  Total bytes sent:     %.2f MB\n", @total_bytes_sent / 1024.0 / 1024.0);
+    printf("  Large transfers:      %d\n", @large_transfers);
+    printf("  DNS queries:          %d\n", @dns_query_count);
+    printf("  Rate alerts:          %d\n", @rate_alerts);
+    
+    if (@dest_ips) {
+        printf("\n  Top destination IPs:\n");
+        print(@dest_ips, 10);
+    }
+    
+    printf("\n🔒 SSL/TLS Security:\n");
+    printf("  SSL verifications:    %d\n", @ssl_verifications);
+    printf("  Verification failures: %d\n", @ssl_verify_failures);
+    
+    printf("\n⚠️  Critical Events:\n");
+    printf("  Process executions:   %d\n", @processes_executed);
+    printf("  Privilege escalation: %d\n", @privilege_escalation);
+    printf("  Ptrace attempts:      %d\n", @ptrace_attempts);
+    
+    if (@files_accessed) {
+        printf("\n  Most accessed files:\n");
+        print(@files_accessed, 10);
+    }
+    
+    if (@privilege_escalation > 0 || @ptrace_attempts > 0) {
+        printf("\n");
+        printf("🚨 CRITICAL SECURITY WARNINGS:\n");
+        if (@privilege_escalation > 0) {
+            printf("  ⚠️  Privilege escalation attempts detected!\n");
+        }
+        if (@ptrace_attempts > 0) {
+            printf("  ⚠️  Process debugging/injection attempts detected!\n");
+        }
+    }
+    
+    printf("\n");
+    
+    // Cleanup
+    clear(@suspicious_ports);
+    clear(@dest_ips);
+    clear(@files_accessed);
+}

@@ -819,6 +819,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "futures",
+ "hazler-browser",
  "hazler-http",
  "hazler-js-parser",
  "hazler-parser",

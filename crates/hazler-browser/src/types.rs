@@ -68,6 +68,34 @@ pub struct PageLoadResult {
     
     /// Cookies from the page
     pub cookies: Vec<Cookie>,
+    
+    /// All intercepted network requests (including API calls)
+    pub network_requests: Vec<NetworkRequest>,
+}
+
+/// Represents a captured network request from browser
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkRequest {
+    /// Request URL
+    pub url: String,
+    
+    /// HTTP method
+    pub method: String,
+    
+    /// Request headers
+    pub headers: std::collections::HashMap<String, String>,
+    
+    /// Request body/payload (if any)
+    pub post_data: Option<String>,
+    
+    /// Resource type (Document, Stylesheet, Script, XHR, Fetch, etc.)
+    pub resource_type: String,
+    
+    /// Request ID
+    pub request_id: String,
+    
+    /// Timestamp
+    pub timestamp: f64,
 }
 
 /// Cookie representation

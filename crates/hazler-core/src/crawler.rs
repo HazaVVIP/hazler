@@ -14,6 +14,9 @@ use tokio::sync::Semaphore;
 use tracing::{error, info, warn};
 use url::Url;
 
+#[cfg(feature = "browser")]
+use hazler_browser::{Browser, BrowserConfig};
+
 /// Context for crawling a page, containing all necessary dependencies
 struct CrawlPageContext {
     http_client: HttpClient,
@@ -26,6 +29,8 @@ struct CrawlPageContext {
     aggressive: bool,
     secret_scanner: Option<SecretScanner>,
     noise_filter: Arc<Mutex<NoiseFilter>>,
+    #[cfg(feature = "browser")]
+    browser: Option<Arc<Browser>>,
 }
 
 /// Main crawler implementation
@@ -37,6 +42,8 @@ pub struct Crawler {
     frame_parser: FrameFileParser,
     url_normalizer: AdvancedUrlNormalizer,
     secret_scanner: Option<SecretScanner>,
+    #[cfg(feature = "browser")]
+    browser: Option<Arc<Browser>>,
 }
 
 impl Crawler {
@@ -66,7 +73,37 @@ impl Crawler {
             frame_parser,
             url_normalizer,
             secret_scanner,
+            #[cfg(feature = "browser")]
+            browser: None,
         })
+    }
+
+    /// Initialize the headless browser (must be called separately to handle async)
+    #[cfg(feature = "browser")]
+    pub async fn init_browser(&mut self) -> anyhow::Result<()> {
+        if self.config.use_headless_browser {
+            info!("Initializing headless browser...");
+            
+            let browser_config = BrowserConfig {
+                headless: true,
+                timeout_secs: self.config.timeout_secs,
+                window_width: 1920,
+                window_height: 1080,
+                intercept_requests: false,
+                screenshot_path: self.config.screenshot_path.clone(),
+                user_agent: Some(self.config.user_agent.clone()),
+                disable_images: self.config.disable_images,
+                disable_javascript: false,
+            };
+
+            let browser = Browser::new(browser_config)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to initialize browser: {}", e))?;
+            
+            self.browser = Some(Arc::new(browser));
+            info!("Browser initialized successfully");
+        }
+        Ok(())
     }
 
     /// Start crawling from a given URL

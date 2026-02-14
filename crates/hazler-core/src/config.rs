@@ -47,6 +47,12 @@ pub struct Config {
     pub strict_domain: bool,
     /// Allow crawling subdomains
     pub allow_subdomains: bool,
+    /// Enable headless browser for JavaScript-heavy sites
+    pub use_headless_browser: bool,
+    /// Path to save screenshots when using headless browser
+    pub screenshot_path: Option<String>,
+    /// Disable images in headless browser for faster loading
+    pub disable_images: bool,
 }
 
 impl Default for Config {
@@ -66,6 +72,9 @@ impl Default for Config {
             secrets_scanning: true, // Enable secrets scanning by default
             strict_domain: false,
             allow_subdomains: false,
+            use_headless_browser: false,
+            screenshot_path: None,
+            disable_images: false,
         }
     }
 }
@@ -286,6 +295,64 @@ impl Config {
     /// ```
     pub fn allow_subdomains(mut self, enabled: bool) -> Self {
         self.allow_subdomains = enabled;
+        self
+    }
+
+    /// Enable headless browser for crawling JavaScript-heavy sites.
+    ///
+    /// When enabled, uses Chrome/Chromium via CDP to render pages with JavaScript.
+    /// This allows crawling modern SPAs (React, Vue, Angular, etc.) that require
+    /// JavaScript execution to display content.
+    ///
+    /// Note: Requires the "browser" feature to be enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().headless_browser(true);
+    /// assert_eq!(config.use_headless_browser, true);
+    /// ```
+    pub fn headless_browser(mut self, enabled: bool) -> Self {
+        self.use_headless_browser = enabled;
+        self
+    }
+
+    /// Set the path to save screenshots when using headless browser.
+    ///
+    /// Screenshots are saved as PNG files with the URL hash as filename.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new()
+    ///     .headless_browser(true)
+    ///     .screenshot_path("screenshots/".to_string());
+    /// ```
+    pub fn screenshot_path(mut self, path: String) -> Self {
+        self.screenshot_path = Some(path);
+        self
+    }
+
+    /// Disable images in headless browser for faster loading.
+    ///
+    /// When enabled, the browser will not load images, which can significantly
+    /// speed up page loading times.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new()
+    ///     .headless_browser(true)
+    ///     .disable_images(true);
+    /// ```
+    pub fn disable_images(mut self, enabled: bool) -> Self {
+        self.disable_images = enabled;
         self
     }
 }

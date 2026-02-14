@@ -1,8 +1,13 @@
 use crate::error::{BrowserError, Result};
-use crate::types::{BrowserConfig, Cookie, PageLoadResult};
+use crate::types::{BrowserConfig, Cookie, NetworkRequest, PageLoadResult};
 use chromiumoxide::browser::{Browser as ChromeBrowser, BrowserConfig as ChromeConfig};
+use chromiumoxide::cdp::browser_protocol::network::{EnableParams, EventRequestWillBeSent, EventResponseReceived};
 use chromiumoxide::page::Page;
 use futures::StreamExt;
+use serde_json;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use url::Url;
 
@@ -81,6 +86,96 @@ impl Browser {
             .await
             .map_err(|e| BrowserError::PageCreationError(format!("Failed to create page: {}", e)))?;
 
+        // Enable network domain to capture network events
+        page.execute(chromiumoxide::cdp::browser_protocol::network::EnableParams::default())
+            .await
+            .map_err(|e| BrowserError::InterceptionError(format!("Failed to enable network: {}", e)))?;
+
+        // Storage for captured network requests
+        let network_requests = Arc::new(Mutex::new(Vec::new()));
+        let network_requests_clone = network_requests.clone();
+
+        // Set up network request listener
+        let mut request_events = page.event_listener::<EventRequestWillBeSent>()
+            .await
+            .map_err(|e| BrowserError::InterceptionError(format!("Failed to create event listener: {}", e)))?;
+
+        // Spawn task to capture network requests
+        tokio::spawn(async move {
+            while let Some(event) = request_events.next().await {
+                let request = event.request;
+                let resource_type = event.r#type.as_ref()
+                    .map(|t| format!("{:?}", t))
+                    .unwrap_or_else(|| "Unknown".to_string());
+
+                // Convert headers to HashMap
+                // Serialize Headers to JSON and then parse as HashMap
+                let mut headers: HashMap<String, String> = HashMap::new();
+                if let Ok(headers_json) = serde_json::to_value(&request.headers) {
+                    if let Ok(headers_map) = serde_json::from_value::<HashMap<String, serde_json::Value>>(headers_json) {
+                        for (k, v) in headers_map {
+                            let value_str = match v {
+                                serde_json::Value::String(s) => s,
+                                _ => v.to_string(),
+                            };
+                            headers.insert(k, value_str);
+                        }
+                    }
+                }
+
+                // Get post data if available
+                let post_data = if request.has_post_data.unwrap_or(false) {
+                    request.post_data_entries.as_ref()
+                        .and_then(|entries| entries.first())
+                        .and_then(|entry| entry.bytes.as_ref())
+                        .map(|b| String::from_utf8_lossy(b.as_ref()).to_string())
+                } else {
+                    None
+                };
+
+                let network_request = NetworkRequest {
+                    url: request.url.clone(),
+                    method: request.method.clone(),
+                    headers,
+                    post_data,
+                    resource_type,
+                    request_id: format!("{:?}", event.request_id),
+                    timestamp: *event.timestamp.inner(),
+                };
+
+                // Log interesting API requests
+                if network_request.url.contains("/api/") 
+                    || network_request.url.contains("/graphql") 
+                    || network_request.url.contains("/v1/")
+                    || network_request.url.contains("/v2/")
+                    || resource_type.contains("XHR") 
+                    || resource_type.contains("Fetch") {
+                    info!("🔍 API Request detected: {} {}", network_request.method, network_request.url);
+                    
+                    // Log authentication headers if present
+                    if let Some(auth) = network_request.headers.get("authorization") {
+                        info!("  🔑 Authorization header found: {}", 
+                            if auth.len() > 20 { 
+                                format!("{}...", &auth[..20]) 
+                            } else { 
+                                auth.clone() 
+                            });
+                    }
+                    
+                    // Log payload for POST/PUT/PATCH requests
+                    if let Some(ref payload) = network_request.post_data {
+                        if payload.len() < 500 {
+                            info!("  📦 Payload: {}", payload);
+                        } else {
+                            info!("  📦 Payload: {} bytes", payload.len());
+                        }
+                    }
+                }
+
+                network_requests_clone.lock().await.push(network_request);
+            }
+        });
+
         // Wait for page to load with timeout
         let timeout = std::time::Duration::from_secs(self.config.timeout_secs);
         
@@ -96,8 +191,9 @@ impl Browser {
             }
         }
 
-        // Give additional time for dynamic content to load
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        // Give additional time for dynamic content to load and network requests to complete
+        info!("Waiting for dynamic content and API calls...");
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
         // Extract links from the page
         let links = self.extract_links(&page).await.unwrap_or_default();
@@ -125,6 +221,19 @@ impl Browser {
         let final_url = Url::parse(&final_url)
             .map_err(|e| BrowserError::NavigationError(format!("Invalid URL: {}", e)))?;
 
+        // Get captured network requests
+        let captured_requests = network_requests.lock().await.clone();
+        
+        info!("Captured {} network requests (including {} API calls)", 
+            captured_requests.len(),
+            captured_requests.iter().filter(|r| 
+                r.url.contains("/api/") || 
+                r.url.contains("/graphql") ||
+                r.resource_type.contains("XHR") ||
+                r.resource_type.contains("Fetch")
+            ).count()
+        );
+
         // Get status code (default to 200 if successful)
         let status_code = 200;
 
@@ -135,6 +244,7 @@ impl Browser {
             title,
             screenshot_data,
             cookies,
+            network_requests: captured_requests,
         })
     }
 

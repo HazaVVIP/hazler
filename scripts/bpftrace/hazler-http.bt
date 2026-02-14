@@ -1,0 +1,181 @@
+#!/usr/bin/env bpftrace
+
+/*
+ * Hazler HTTP Tracer - eBPF/bpftrace
+ * 
+ * This script traces HTTP-level operations in Hazler,
+ * monitoring request/response patterns and timing.
+ * 
+ * Usage:
+ *   sudo bpftrace hazler-http.bt
+ *   sudo bpftrace hazler-http.bt -c "hazler https://example.com"
+ */
+
+BEGIN
+{
+    printf("🌐 Hazler HTTP Tracer Started\n");
+    printf("Monitoring HTTP operations...\n");
+    printf("%-10s %-20s %-10s %-50s %s\n", "TIME(ms)", "EVENT", "STATUS", "URL", "DURATION");
+}
+
+// Track HTTP requests via sendto syscall pattern
+tracepoint:syscalls:sys_enter_sendto
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @http_send[tid] = nsecs;
+    @http_requests++;
+}
+
+tracepoint:syscalls:sys_exit_sendto
+/@http_send[tid] && retval > 0/
+{
+    $duration = nsecs - @http_send[tid];
+    
+    if ($duration > 10000000) {  // > 10ms
+        printf("%-10u %-20s %-10s %-50s %d ms\n",
+            elapsed / 1000000,
+            "HTTP_SEND_SLOW",
+            "SLOW",
+            "-",
+            $duration / 1000000
+        );
+    }
+    
+    @http_send_duration = hist($duration / 1000000);
+    delete(@http_send[tid]);
+}
+
+// Track HTTP responses via recvfrom
+tracepoint:syscalls:sys_enter_recvfrom
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @http_recv[tid] = nsecs;
+}
+
+tracepoint:syscalls:sys_exit_recvfrom
+/@http_recv[tid] && retval > 0/
+{
+    $duration = nsecs - @http_recv[tid];
+    @http_responses++;
+    @response_sizes = hist(retval);
+    
+    if (retval > 1048576) {  // > 1MB
+        printf("%-10u %-20s %-10s %-50s %.2f MB\n",
+            elapsed / 1000000,
+            "HTTP_LARGE_RESP",
+            "LARGE",
+            "-",
+            retval / 1024.0 / 1024.0
+        );
+    }
+    
+    @http_recv_duration = hist($duration / 1000000);
+    @total_response_bytes = sum(retval);
+    
+    delete(@http_recv[tid]);
+}
+
+// Track connection timeouts
+tracepoint:syscalls:sys_enter_poll
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @poll_start[tid] = nsecs;
+}
+
+tracepoint:syscalls:sys_exit_poll
+/@poll_start[tid]/
+{
+    $duration = nsecs - @poll_start[tid];
+    
+    // Timeout or long wait
+    if ($duration > 5000000000) {  // > 5 seconds
+        printf("%-10u %-20s %-10s %-50s %d sec\n",
+            elapsed / 1000000,
+            "HTTP_TIMEOUT",
+            "TIMEOUT",
+            "-",
+            $duration / 1000000000
+        );
+        
+        @timeouts++;
+    }
+    
+    delete(@poll_start[tid]);
+}
+
+// Track HTTP status codes (via response parsing)
+// This is a simplified approach - would need userspace probes for accurate HTTP parsing
+
+// Track request rate
+interval:s:1
+{
+    @requests_per_second = hist(@http_requests);
+    
+    if (@http_requests > 50) {
+        time("%H:%M:%S ");
+        printf("⚡ High request rate: %d req/sec\n", @http_requests);
+    }
+    
+    @http_requests = 0;
+}
+
+// 5-second statistics
+interval:s:5
+{
+    time("%H:%M:%S ");
+    printf("📊 Requests: %d, Responses: %d, Timeouts: %d, Data: %.2f MB\n",
+        @total_requests,
+        @http_responses,
+        @timeouts,
+        @total_response_bytes / 1024.0 / 1024.0
+    );
+    
+    @total_requests += @http_requests;
+}
+
+END
+{
+    printf("\n");
+    printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    printf("🌐 Hazler HTTP Tracer - Final Statistics\n");
+    printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    
+    printf("\n📊 HTTP Operations:\n");
+    printf("  Total requests:       %d\n", @total_requests);
+    printf("  Total responses:      %d\n", @http_responses);
+    printf("  Timeouts:             %d\n", @timeouts);
+    printf("  Success rate:         %.1f%%\n", 
+        (@total_requests > 0 ? ((@total_requests - @timeouts) * 100.0 / @total_requests) : 0));
+    
+    printf("\n📦 Data Transfer:\n");
+    printf("  Response bytes:       %.2f MB\n", @total_response_bytes / 1024.0 / 1024.0);
+    printf("  Average response:     %.2f KB\n", 
+        (@http_responses > 0 ? (@total_response_bytes / @http_responses / 1024.0) : 0));
+    
+    if (@response_sizes) {
+        printf("\n  Response size distribution:\n");
+        print(@response_sizes);
+    }
+    
+    if (@http_send_duration) {
+        printf("\n⏱️  Request Send Duration (ms):\n");
+        print(@http_send_duration);
+    }
+    
+    if (@http_recv_duration) {
+        printf("\n⏱️  Response Receive Duration (ms):\n");
+        print(@http_recv_duration);
+    }
+    
+    if (@requests_per_second) {
+        printf("\n⚡ Requests per Second Distribution:\n");
+        print(@requests_per_second);
+    }
+    
+    printf("\n");
+    
+    // Cleanup
+    clear(@http_send);
+    clear(@http_recv);
+    clear(@poll_start);
+}

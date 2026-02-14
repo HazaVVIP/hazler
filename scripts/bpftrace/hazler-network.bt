@@ -1,0 +1,227 @@
+#!/usr/bin/env bpftrace
+
+/*
+ * Hazler Network Monitor - eBPF/bpftrace
+ * 
+ * This script monitors all network connections made by Hazler,
+ * tracking HTTP requests, response times, and connection patterns.
+ * 
+ * Usage:
+ *   sudo bpftrace hazler-network.bt
+ *   sudo bpftrace hazler-network.bt -c "hazler https://example.com"
+ */
+
+BEGIN
+{
+    printf("🔍 Hazler Network Monitor Started\n");
+    printf("Monitoring network connections for Hazler...\n");
+    printf("%-10s %-20s %-20s %-10s %s\n", "TIME", "PROCESS", "EVENT", "PID", "DETAILS");
+}
+
+// Track TCP connections
+tracepoint:syscalls:sys_enter_connect
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    $sa = (struct sockaddr *)args->uservaddr;
+    
+    if ($sa->sa_family == AF_INET) {
+        $s = (struct sockaddr_in *)args->uservaddr;
+        $port = ($s->sin_port >> 8) | (($s->sin_port << 8) & 0xff00);
+        
+        printf("%-10u %-20s %-20s %-10d IP: %d.%d.%d.%d:%d\n",
+            elapsed / 1000000,
+            comm,
+            "TCP_CONNECT",
+            pid,
+            $s->sin_addr.s_addr & 0xff,
+            ($s->sin_addr.s_addr >> 8) & 0xff,
+            ($s->sin_addr.s_addr >> 16) & 0xff,
+            ($s->sin_addr.s_addr >> 24) & 0xff,
+            $port
+        );
+        
+        @connect_start[tid] = nsecs;
+        @connections++;
+    }
+}
+
+// Track connection completion
+tracepoint:syscalls:sys_exit_connect
+/@connect_start[tid]/
+{
+    $duration = nsecs - @connect_start[tid];
+    
+    printf("%-10u %-20s %-20s %-10d Duration: %d ms\n",
+        elapsed / 1000000,
+        comm,
+        "CONNECT_DONE",
+        pid,
+        $duration / 1000000
+    );
+    
+    @connect_duration = hist($duration / 1000000);
+    delete(@connect_start[tid]);
+}
+
+// Track DNS resolution
+tracepoint:syscalls:sys_enter_recvfrom
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @dns_queries++;
+}
+
+// Track HTTP send operations
+tracepoint:syscalls:sys_enter_sendto
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @bytes_sent = sum(args->len);
+    @send_count++;
+    
+    if (args->len > 0) {
+        printf("%-10u %-20s %-20s %-10d Bytes: %d\n",
+            elapsed / 1000000,
+            comm,
+            "HTTP_SEND",
+            pid,
+            args->len
+        );
+    }
+}
+
+// Track HTTP receive operations
+tracepoint:syscalls:sys_enter_recvfrom
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @recv_start[tid] = nsecs;
+}
+
+tracepoint:syscalls:sys_exit_recvfrom
+/@recv_start[tid] && retval > 0/
+{
+    $duration = nsecs - @recv_start[tid];
+    
+    @bytes_received = sum(retval);
+    @recv_count++;
+    
+    printf("%-10u %-20s %-20s %-10d Bytes: %d, Time: %d μs\n",
+        elapsed / 1000000,
+        comm,
+        "HTTP_RECV",
+        pid,
+        retval,
+        $duration / 1000
+    );
+    
+    delete(@recv_start[tid]);
+}
+
+// Track socket creation
+tracepoint:syscalls:sys_enter_socket
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    printf("%-10u %-20s %-20s %-10d Family: %d, Type: %d\n",
+        elapsed / 1000000,
+        comm,
+        "SOCKET_CREATE",
+        pid,
+        args->family,
+        args->type
+    );
+    
+    @sockets_created++;
+}
+
+// Track socket close
+tracepoint:syscalls:sys_enter_close
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @sockets_closed++;
+}
+
+// Track TLS/SSL handshakes (OpenSSL)
+uprobe:/usr/lib/x86_64-linux-gnu/libssl.so.3:SSL_connect
+/comm == "hazler" || comm == "hazler-cli"/
+{
+    @ssl_connects++;
+    @ssl_start[tid] = nsecs;
+    
+    printf("%-10u %-20s %-20s %-10d Starting TLS handshake\n",
+        elapsed / 1000000,
+        comm,
+        "TLS_CONNECT",
+        pid
+    );
+}
+
+uretprobe:/usr/lib/x86_64-linux-gnu/libssl.so.3:SSL_connect
+/@ssl_start[tid]/
+{
+    $duration = nsecs - @ssl_start[tid];
+    
+    printf("%-10u %-20s %-20s %-10d TLS handshake: %d ms\n",
+        elapsed / 1000000,
+        comm,
+        "TLS_DONE",
+        pid,
+        $duration / 1000000
+    );
+    
+    @tls_duration = hist($duration / 1000000);
+    delete(@ssl_start[tid]);
+}
+
+// 5-second interval statistics
+interval:s:5
+{
+    time("%H:%M:%S ");
+    printf("📊 Stats - Connections: %d, DNS: %d, Sent: %d KB, Recv: %d KB\n",
+        @connections,
+        @dns_queries,
+        @bytes_sent / 1024,
+        @bytes_received / 1024
+    );
+}
+
+END
+{
+    printf("\n");
+    printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    printf("📊 Hazler Network Monitor - Final Statistics\n");
+    printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    
+    printf("\n🌐 Network Connections:\n");
+    printf("  Total connections:    %d\n", @connections);
+    printf("  Sockets created:      %d\n", @sockets_created);
+    printf("  Sockets closed:       %d\n", @sockets_closed);
+    printf("  DNS queries:          %d\n", @dns_queries);
+    printf("  TLS handshakes:       %d\n", @ssl_connects);
+    
+    printf("\n📤 Data Transfer:\n");
+    printf("  Send operations:      %d\n", @send_count);
+    printf("  Bytes sent:           %d KB (%.2f MB)\n", 
+        @bytes_sent / 1024, 
+        @bytes_sent / 1024.0 / 1024.0);
+    printf("  Receive operations:   %d\n", @recv_count);
+    printf("  Bytes received:       %d KB (%.2f MB)\n", 
+        @bytes_received / 1024,
+        @bytes_received / 1024.0 / 1024.0);
+    
+    if (@connect_duration) {
+        printf("\n⏱️  Connection Duration (ms):\n");
+        print(@connect_duration);
+    }
+    
+    if (@tls_duration) {
+        printf("\n🔒 TLS Handshake Duration (ms):\n");
+        print(@tls_duration);
+    }
+    
+    printf("\n");
+    
+    // Cleanup
+    clear(@connect_start);
+    clear(@recv_start);
+    clear(@ssl_start);
+    clear(@connect_duration);
+    clear(@tls_duration);
+}

@@ -695,6 +695,35 @@ cargo test
 RUST_LOG=debug cargo run -- https://example.com
 ```
 
+### eBPF/bpftrace Debugging 🔍
+
+Hazler includes advanced eBPF-based monitoring scripts for deep system-level debugging and performance analysis:
+
+```bash
+# Monitor network activity
+sudo ./scripts/bpftrace/hazler-trace.sh network hazler https://example.com
+
+# Profile performance
+sudo ./scripts/bpftrace/hazler-trace.sh perf hazler https://example.com -d 3
+
+# Security monitoring
+sudo ./scripts/bpftrace/hazler-trace.sh security hazler https://target.com
+
+# HTTP tracing
+sudo ./scripts/bpftrace/hazler-trace.sh http hazler https://api.example.com
+```
+
+**Features:**
+- 🌐 Network connection tracking (TCP, DNS, TLS)
+- ⚡ Performance profiling (CPU, memory, I/O)
+- 🛡️ Security monitoring (suspicious patterns, file access)
+- 📊 HTTP request/response tracing
+- 📈 Real-time statistics and histograms
+
+See [scripts/bpftrace/README.md](scripts/bpftrace/README.md) for detailed documentation.
+
+**Requirements:** Linux with bpftrace installed (`sudo apt install bpftrace`)
+
 ## Roadmap
 
 ### Phase 1: MVP ✅
@@ -722,7 +751,8 @@ RUST_LOG=debug cargo run -- https://example.com
 - Advanced rate limiting
 - Priority queue with scoring
 - Content similarity detection (SimHash)
-- Headless browser support
+- **Headless browser support** ✅
+- **eBPF/bpftrace debugging** ✅
 - Distributed crawling (Redis)
 - OpenTelemetry integration
 - Dashboard

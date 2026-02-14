@@ -272,8 +272,6 @@ impl Crawler {
         // Check if we should use browser mode for this URL
         #[cfg(feature = "browser")]
         let use_browser = context.browser.is_some() && Self::should_use_browser(&url);
-        #[cfg(not(feature = "browser"))]
-        let _use_browser = false;
 
         // Use browser or HTTP client based on configuration
         #[cfg(feature = "browser")]
@@ -299,7 +297,7 @@ impl Crawler {
             || path.ends_with(".gif")
             || path.ends_with(".svg")
             || path.ends_with(".xml")
-            || path.ends_with(".frame")
+            || path.ends_with(".frame") // .frame files contain endpoint definitions (custom format)
             || path.contains("/api/")
         {
             return false;
@@ -309,6 +307,11 @@ impl Crawler {
     }
 
     /// Crawl a page using headless browser
+    /// 
+    /// # Known Limitations
+    /// - Body content is not returned (empty string) to reduce memory usage
+    /// - Secret scanning is not performed in browser mode
+    /// - Future enhancement: Extract rendered HTML from browser
     #[cfg(feature = "browser")]
     async fn crawl_page_with_browser(
         url: Url,
@@ -382,14 +385,14 @@ impl Crawler {
             seen.insert(canonical)
         });
 
-        // Create page object
-        // Note: Browser doesn't return body content for now, use empty string
+        // Create page object with empty body
+        // TODO: Extract rendered HTML from browser for body content
         let mut page = Page::new(result.url.clone(), result.status_code, String::new(), depth);
         page.links = links.clone();
         page.content_type = Some("text/html".to_string());
 
-        // TODO: Scan network request payloads for secrets if enabled
-        // For now, we skip secret scanning in browser mode as we don't have the body
+        // Note: Secret scanning is skipped in browser mode due to empty body
+        // Future enhancement: Scan network request payloads for secrets
 
         // Filter links by scope and depth
         let new_urls: Vec<(Url, usize)> = links

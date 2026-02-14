@@ -1,5 +1,7 @@
 use crate::error::{Error, Result};
-use reqwest::Client;
+use crate::user_agents::{UserAgentDatabase, generate_chrome_client_hints};
+use reqwest::{Client, header};
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, warn};
 use url::Url;
@@ -12,6 +14,9 @@ const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
 pub struct HttpClient {
     client: Client,
     max_body_size: usize,
+    user_agent_db: Arc<UserAgentDatabase>,
+    rotate_user_agent: bool,
+    add_chrome_hints: bool,
 }
 
 impl HttpClient {
@@ -27,7 +32,22 @@ impl HttpClient {
         Ok(Self {
             client,
             max_body_size: MAX_BODY_SIZE,
+            user_agent_db: Arc::new(UserAgentDatabase::new()),
+            rotate_user_agent: false,
+            add_chrome_hints: false,
         })
+    }
+    
+    /// Enable User-Agent rotation for WAF evasion
+    pub fn with_user_agent_rotation(mut self, enable: bool) -> Self {
+        self.rotate_user_agent = enable;
+        self
+    }
+    
+    /// Enable Chrome client hints for better fingerprinting
+    pub fn with_chrome_hints(mut self, enable: bool) -> Self {
+        self.add_chrome_hints = enable;
+        self
     }
 
     /// Create a default HTTP client
@@ -39,7 +59,27 @@ impl HttpClient {
     pub async fn fetch(&self, url: &Url) -> Result<HttpResponse> {
         debug!("Fetching URL: {}", url);
 
-        let response = self.client.get(url.as_str()).send().await.map_err(|e| {
+        // Build request with optional User-Agent rotation and Chrome hints
+        let mut request = self.client.get(url.as_str());
+        
+        // Apply User-Agent rotation if enabled
+        if self.rotate_user_agent {
+            let user_agent = self.user_agent_db.get_random();
+            request = request.header(header::USER_AGENT, user_agent);
+            debug!("Using rotated User-Agent: {}", user_agent);
+            
+            // Add Chrome client hints if enabled and UA is Chrome
+            if self.add_chrome_hints {
+                if let Some(hints) = generate_chrome_client_hints(user_agent) {
+                    for (name, value) in hints {
+                        request = request.header(name, value);
+                    }
+                    debug!("Added Chrome client hints");
+                }
+            }
+        }
+        
+        let response = request.send().await.map_err(|e| {
             warn!("Failed to fetch {}: {}", url, e);
             Error::RequestFailed(e)
         })?;

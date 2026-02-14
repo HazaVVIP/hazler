@@ -49,8 +49,17 @@ pub struct Crawler {
 impl Crawler {
     /// Create a new crawler with the given configuration
     pub fn new(config: Config) -> anyhow::Result<Self> {
-        let http_client =
+        let mut http_client =
             HttpClient::new(&config.user_agent, Duration::from_secs(config.timeout_secs))?;
+        
+        // Enable User-Agent rotation and Chrome hints if stealth mode is enabled
+        if config.stealth_mode {
+            http_client = http_client
+                .with_user_agent_rotation(true)
+                .with_chrome_hints(true);
+            info!("Stealth mode enabled: User-Agent rotation and Chrome hints activated");
+        }
+        
         let parser = HtmlParser::new();
         let js_parser = JavaScriptParser::new()
             .map_err(|e| anyhow::anyhow!("Failed to create JS parser: {}", e))?;

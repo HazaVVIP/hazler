@@ -269,6 +269,145 @@ impl Crawler {
     ) -> anyhow::Result<(Page, Vec<(Url, usize)>)> {
         info!("Crawling: {} (depth: {})", url, depth);
 
+        // Check if we should use browser mode for this URL
+        #[cfg(feature = "browser")]
+        let use_browser = context.browser.is_some() && Self::should_use_browser(&url);
+        #[cfg(not(feature = "browser"))]
+        let use_browser = false;
+
+        // Use browser or HTTP client based on configuration
+        #[cfg(feature = "browser")]
+        if use_browser {
+            return Self::crawl_page_with_browser(url, depth, context).await;
+        }
+
+        // Default HTTP-based crawling
+        Self::crawl_page_with_http(url, depth, context).await
+    }
+
+    /// Determine if we should use browser for this URL
+    /// Browser is useful for HTML pages but not for API endpoints or static files
+    #[cfg(feature = "browser")]
+    fn should_use_browser(url: &Url) -> bool {
+        let path = url.path();
+        // Don't use browser for known static/API resources
+        if path.ends_with(".js")
+            || path.ends_with(".json")
+            || path.ends_with(".css")
+            || path.ends_with(".jpg")
+            || path.ends_with(".png")
+            || path.ends_with(".gif")
+            || path.ends_with(".svg")
+            || path.ends_with(".xml")
+            || path.ends_with(".frame")
+            || path.contains("/api/")
+        {
+            return false;
+        }
+        // Use browser for likely HTML pages
+        true
+    }
+
+    /// Crawl a page using headless browser
+    #[cfg(feature = "browser")]
+    async fn crawl_page_with_browser(
+        url: Url,
+        depth: usize,
+        context: CrawlPageContext,
+    ) -> anyhow::Result<(Page, Vec<(Url, usize)>)> {
+        info!("Crawling with browser: {} (depth: {})", url, depth);
+
+        let browser = context
+            .browser
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Browser not initialized"))?;
+
+        // Load page with browser
+        let result = browser.load_page(&url).await.map_err(|e| {
+            anyhow::anyhow!("Browser page load failed for {}: {}", url, e)
+        })?;
+
+        // Convert browser links (strings) to Urls
+        let mut links = Vec::new();
+        for link_str in &result.links {
+            match Url::parse(link_str) {
+                Ok(link_url) => links.push(link_url),
+                Err(_) => {
+                    // Try resolving relative URL
+                    if let Ok(resolved) = url.join(link_str) {
+                        links.push(resolved);
+                    }
+                }
+            }
+        }
+
+        // Add network requests as additional URLs to crawl (API endpoints discovered)
+        for network_req in &result.network_requests {
+            // Parse network request URL and add to links
+            if let Ok(req_url) = Url::parse(&network_req.url) {
+                // Only add if it's in scope and looks interesting
+                if context.scope_validator.is_in_scope(&req_url) {
+                    // Prioritize API endpoints
+                    if network_req.url.contains("/api/")
+                        || network_req.url.contains("/graphql")
+                        || network_req.url.contains("/v1/")
+                        || network_req.url.contains("/v2/")
+                        || network_req.resource_type.contains("XHR")
+                        || network_req.resource_type.contains("Fetch")
+                    {
+                        info!(
+                            "Adding API endpoint from network request: {} {}",
+                            network_req.method, network_req.url
+                        );
+                        links.push(req_url);
+                    }
+                }
+            }
+        }
+
+        // If aggressive mode, generate URL variants
+        if context.aggressive {
+            let mut variants = Vec::new();
+            for link in &links {
+                variants.extend(context.url_normalizer.normalize(link));
+                variants.extend(context.url_normalizer.generate_api_variations(link));
+            }
+            links.extend(variants);
+        }
+
+        // Deduplicate links
+        let mut seen = std::collections::HashSet::new();
+        links.retain(|link| {
+            let canonical = context.url_normalizer.canonicalize(link);
+            seen.insert(canonical)
+        });
+
+        // Create page object
+        // Note: Browser doesn't return body content for now, use empty string
+        let mut page = Page::new(result.url.clone(), result.status_code, String::new(), depth);
+        page.links = links.clone();
+        page.content_type = Some("text/html".to_string());
+
+        // TODO: Scan network request payloads for secrets if enabled
+        // For now, we skip secret scanning in browser mode as we don't have the body
+
+        // Filter links by scope and depth
+        let new_urls: Vec<(Url, usize)> = links
+            .into_iter()
+            .filter(|link| context.scope_validator.is_in_scope(link))
+            .filter(|_| depth < context.max_depth)
+            .map(|link| (link, depth + 1))
+            .collect();
+
+        Ok((page, new_urls))
+    }
+
+    /// Crawl a page using HTTP client
+    async fn crawl_page_with_http(
+        url: Url,
+        depth: usize,
+        context: CrawlPageContext,
+    ) -> anyhow::Result<(Page, Vec<(Url, usize)>)> {
         // Fetch the page
         let response = context.http_client.fetch(&url).await?;
 

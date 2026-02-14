@@ -235,30 +235,51 @@ As identified, Hazler is "sangat biasa-biasa saja" (very ordinary) because:
 **Why Critical:** 90% of modern web apps are SPAs requiring JavaScript execution
 
 **New Crate:** `hazler-browser`  
-**Technology:** chromiumoxide or fantoccini  
+**Technology:** chromiumoxide  
 **Effort:** 3 weeks  
 **Impact:** MASSIVE
 
+**Status:** ✅ **IMPLEMENTED**
+
 **Features:**
-- Chrome/Firefox automation via CDP
-- XHR/Fetch request interception
-- Screenshot capability
-- Cookie management
-- JavaScript execution context
+- [x] Chrome automation via CDP (chromiumoxide)
+- [x] Network.requestWillBeSent event hook for API interception
+- [x] Automatic capture of hidden API endpoints, auth headers, and payloads
+- [x] XHR/Fetch request logging with detailed information
+- [x] Screenshot capability
+- [x] Cookie management
+- [x] JavaScript execution context
+- [x] Link extraction from dynamically loaded content
 
 **CLI Usage:**
 ```bash
 hazler https://app.com --headless
 hazler https://app.com --headless --screenshot screenshots/
+hazler https://app.com --headless --disable-images  # Faster loading
 ```
 
-**Implementation:**
-- Create new crate `hazler-browser`
-- Integrate chromiumoxide for Chrome DevTools Protocol
-- Implement page loading and navigation
-- Add request/response interception
-- Integrate with main crawler workflow
-- Performance optimization (minimize overhead)
+**Implementation Checklist:**
+- [x] Create new crate `hazler-browser`
+- [x] Integrate chromiumoxide for Chrome DevTools Protocol
+- [x] Implement page loading and navigation
+- [x] Add Network.requestWillBeSent event interception
+- [x] Capture authentication headers automatically
+- [x] Log API endpoints, payloads, and request details
+- [x] Add screenshot and cookie management
+- [ ] Integrate with main crawler workflow (In Progress)
+- [ ] Add CLI flags and options
+- [ ] Performance optimization (minimize overhead)
+- [ ] Write tests with React/Vue/Angular apps
+
+**Key Innovation:** 
+Unlike other crawlers, Hazler now hooks directly into Chrome DevTools Protocol's Network.requestWillBeSent event, automatically capturing ALL network activity including:
+- Hidden API endpoints that never appear in HTML
+- Authentication tokens and Bearer headers
+- JSON payloads for POST/PUT/PATCH requests  
+- GraphQL queries and mutations
+- WebSocket connections
+
+This is a **goldmine for finding IDOR vulnerabilities and API leaks** that traditional HTTP-only crawlers miss entirely!
 
 ---
 
@@ -270,14 +291,16 @@ hazler https://app.com --headless --screenshot screenshots/
 **Effort:** 2 weeks  
 **Impact:** Essential for real-world pentesting
 
+**Status:** ⏳ Planned
+
 **Features:**
-- Realistic browser header rotation (Chrome, Firefox, Safari)
-- sec-ch-ua headers (Chrome client hints)
-- Request timing randomization
-- Accept-Language variation
-- Accept-Encoding variation
-- Referer management
-- TLS fingerprint randomization (future)
+- [ ] Realistic browser header rotation (Chrome, Firefox, Safari)
+- [ ] sec-ch-ua headers (Chrome client hints)
+- [ ] Request timing randomization
+- [ ] Accept-Language variation
+- [ ] Accept-Encoding variation
+- [ ] Referer management
+- [ ] TLS fingerprint randomization (future)
 
 **CLI Usage:**
 ```bash
@@ -813,13 +836,14 @@ pub struct CircuitBreaker {
 - [ ] Documentation and examples
 
 #### Weeks 3-5: Headless Browser
-- [ ] Create `hazler-browser` crate structure
-- [ ] Integrate chromiumoxide
-- [ ] Implement basic page loading
-- [ ] Add request interception (XHR/Fetch)
-- [ ] Add response capture
-- [ ] Add screenshot capability
-- [ ] Implement cookie management
+- [x] Create `hazler-browser` crate structure
+- [x] Integrate chromiumoxide
+- [x] Implement basic page loading
+- [x] Add Network.requestWillBeSent event hook (CDP)
+- [x] Add automatic capture of API endpoints and headers
+- [x] Add response capture
+- [x] Add screenshot capability
+- [x] Implement cookie management
 - [ ] Integrate with main crawler
 - [ ] Add CLI flags (--headless, --screenshot)
 - [ ] Performance optimization (minimize overhead)

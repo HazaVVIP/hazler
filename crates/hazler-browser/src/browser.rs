@@ -1,7 +1,7 @@
 use crate::error::{BrowserError, Result};
 use crate::types::{BrowserConfig, Cookie, NetworkRequest, PageLoadResult};
 use chromiumoxide::browser::{Browser as ChromeBrowser, BrowserConfig as ChromeConfig};
-use chromiumoxide::cdp::browser_protocol::network::{EnableParams, EventRequestWillBeSent, EventResponseReceived};
+use chromiumoxide::cdp::browser_protocol::network::EventRequestWillBeSent;
 use chromiumoxide::page::Page;
 use futures::StreamExt;
 use serde_json;
@@ -103,7 +103,7 @@ impl Browser {
         // Spawn task to capture network requests
         tokio::spawn(async move {
             while let Some(event) = request_events.next().await {
-                let request = event.request;
+                let request = &event.request;
                 let resource_type = event.r#type.as_ref()
                     .map(|t| format!("{:?}", t))
                     .unwrap_or_else(|| "Unknown".to_string());
@@ -138,7 +138,7 @@ impl Browser {
                     method: request.method.clone(),
                     headers,
                     post_data,
-                    resource_type,
+                    resource_type: resource_type.clone(),
                     request_id: format!("{:?}", event.request_id),
                     timestamp: *event.timestamp.inner(),
                 };

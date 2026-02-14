@@ -10,7 +10,7 @@ name = "hazler"
 path = "src/main.rs"
 
 [dependencies]
-hazler-core = { path = "../hazler-core" }
+hazler-core = { path = "../hazler-core", features = ["browser"] }
 hazler-http = { path = "../hazler-http" }
 hazler-parser = { path = "../hazler-parser" }
 tokio = { workspace = true }

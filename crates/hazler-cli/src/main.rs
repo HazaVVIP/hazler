@@ -2,7 +2,7 @@ use clap::Parser;
 use colored::Colorize;
 use hazler_core::{Config, Crawler};
 use std::process;
-use tracing::{error, Level};
+use tracing::{error, info, Level};
 use url::Url;
 
 mod output;
@@ -123,6 +123,23 @@ struct Args {
     /// Note: This is ignored if --strict-domain is enabled
     #[arg(long)]
     subs: bool,
+
+    /// Enable headless browser for JavaScript-heavy sites (SPAs)
+    /// Uses Chrome/Chromium via CDP to render pages with JavaScript
+    /// Allows crawling modern SPAs (React, Vue, Angular, etc.)
+    #[arg(long)]
+    browser: bool,
+
+    /// Path to save screenshots when using headless browser
+    /// Screenshots are saved as PNG files
+    /// Example: --screenshot-path screenshots/
+    #[arg(long)]
+    screenshot_path: Option<String>,
+
+    /// Disable images in headless browser for faster loading
+    /// When enabled, the browser will not load images
+    #[arg(long)]
+    disable_images: bool,
 }
 
 #[tokio::main]
@@ -201,14 +218,38 @@ async fn main() {
     // Apply secrets scanning based on flag (defaults to enabled)
     config = config.secrets_scanning(enable_secrets);
 
+    // Apply browser settings
+    if args.browser {
+        config = config.headless_browser(true);
+        
+        if let Some(screenshot_path) = args.screenshot_path {
+            config = config.screenshot_path(screenshot_path);
+        }
+        
+        if args.disable_images {
+            config = config.disable_images(true);
+        }
+    }
+
     // Create and run crawler
-    let crawler = match Crawler::new(config) {
+    let mut crawler = match Crawler::new(config) {
         Ok(c) => c,
         Err(e) => {
             error!("Failed to create crawler: {}", e);
             process::exit(1);
         }
     };
+
+    // Initialize browser if enabled
+    if args.browser {
+        match crawler.init_browser().await {
+            Ok(_) => info!("Browser initialized successfully"),
+            Err(e) => {
+                error!("Failed to initialize browser: {}", e);
+                process::exit(1);
+            }
+        }
+    }
 
     match crawler.crawl(start_url).await {
         Ok(result) => {

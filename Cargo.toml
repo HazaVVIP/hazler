@@ -6,7 +6,7 @@ members = [
     "crates/hazler-parser",
     "crates/hazler-js-parser",
     "crates/hazler-secrets",
-    "crates/hazler-cli",
+    "crates/hazler-cli", "crates/hazler-browser",
 ]
 
 [workspace.package]

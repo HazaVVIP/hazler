@@ -166,6 +166,13 @@ async fn main() {
         }
     };
 
+    // Validate browser-related flags
+    if !args.browser && (args.screenshot_path.is_some() || args.disable_images) {
+        error!("--screenshot-path and --disable-images require --browser flag to be enabled");
+        eprintln!("Use --browser to enable headless browser mode");
+        process::exit(1);
+    }
+
     // Apply --all mode defaults if enabled
     let (max_depth, max_pages, aggressive, enable_secrets, enable_stealth) = if args.all {
         // --all mode: comprehensive scanning
@@ -232,6 +239,8 @@ async fn main() {
     }
 
     // Create and run crawler
+    // Note: Declared as mutable to support browser initialization via init_browser()
+    // when the browser feature is enabled
     let mut crawler = match Crawler::new(config) {
         Ok(c) => c,
         Err(e) => {

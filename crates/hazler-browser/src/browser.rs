@@ -24,8 +24,8 @@ impl Browser {
 
         let mut chrome_config = ChromeConfig::builder();
         
-        // Set headless mode
-        if config.headless {
+        // Set headless mode (default is headless, with_head() makes it non-headless)
+        if !config.headless {
             chrome_config = chrome_config.with_head();
         }
         

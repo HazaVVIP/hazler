@@ -219,8 +219,13 @@ pub struct PageLoadResult {
 
 ## Requirements
 
-- Chrome or Chromium browser installed on the system
+- Chrome or Chromium browser installed on the system (version 90+ recommended)
 - Chrome must be available in PATH or specified via environment variable
+- Linux, macOS, or Windows operating system
+- Minimum 2GB RAM (4GB+ recommended for heavy crawling)
+
+**Supported Chrome/Chromium versions:** 90+  
+**Tested with:** Chrome 119, Chromium 120
 
 ## Performance Tips
 

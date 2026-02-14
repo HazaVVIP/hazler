@@ -177,7 +177,7 @@ tracepoint:syscalls:sys_enter_sendto
 
 // Monitor DNS queries for suspicious domains
 tracepoint:syscalls:sys_enter_sendto
-/comm == "hazler" || comm == "hazler-cli" && args->len > 0/
+/((comm == "hazler" || comm == "hazler-cli") && args->len > 0)/
 {
     @dns_query_count++;
 }

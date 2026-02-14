@@ -14,6 +14,7 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }
+rand = "0.8"
 hazler-http = { path = "../hazler-http" }
 hazler-parser = { path = "../hazler-parser" }
 hazler-js-parser = { path = "../hazler-js-parser" }

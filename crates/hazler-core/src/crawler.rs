@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::delay::DelayConfig;
 use crate::noise_filter::NoiseFilter;
 use crate::normalizer::AdvancedUrlNormalizer;
 use crate::queue::UrlQueue;
@@ -11,7 +12,7 @@ use hazler_secrets::SecretScanner;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::Semaphore;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 #[cfg(feature = "browser")]
@@ -29,6 +30,7 @@ struct CrawlPageContext {
     aggressive: bool,
     secret_scanner: Option<SecretScanner>,
     noise_filter: Arc<Mutex<NoiseFilter>>,
+    delay_config: Option<DelayConfig>,
     #[cfg(feature = "browser")]
     browser: Option<Arc<Browser>>,
 }
@@ -49,8 +51,17 @@ pub struct Crawler {
 impl Crawler {
     /// Create a new crawler with the given configuration
     pub fn new(config: Config) -> anyhow::Result<Self> {
-        let http_client =
+        let mut http_client =
             HttpClient::new(&config.user_agent, Duration::from_secs(config.timeout_secs))?;
+        
+        // Enable User-Agent rotation and Chrome hints if stealth mode is enabled
+        if config.stealth_mode {
+            http_client = http_client
+                .with_user_agent_rotation(true)
+                .with_chrome_hints(true);
+            info!("Stealth mode enabled: User-Agent rotation and Chrome hints activated");
+        }
+        
         let parser = HtmlParser::new();
         let js_parser = JavaScriptParser::new()
             .map_err(|e| anyhow::anyhow!("Failed to create JS parser: {}", e))?;
@@ -126,6 +137,13 @@ impl Crawler {
 
         // Create noise filter for smart rate limiting
         let noise_filter = Arc::new(Mutex::new(NoiseFilter::with_threshold(5)));
+        
+        // Configure request timing if stealth mode is enabled
+        let delay_config = if self.config.stealth_mode {
+            Some(DelayConfig::stealth())
+        } else {
+            None
+        };
 
         // Add the starting URL
         queue.push(start_url.clone(), 0);
@@ -160,6 +178,7 @@ impl Crawler {
                     let aggressive = self.config.aggressive_discovery;
                     let secret_scanner = self.secret_scanner.clone();
                     let noise_filter = Arc::clone(&noise_filter);
+                    let delay_config = delay_config.clone();
                     #[cfg(feature = "browser")]
                     let browser = self.browser.clone();
 
@@ -182,6 +201,7 @@ impl Crawler {
                             aggressive,
                             secret_scanner,
                             noise_filter,
+                            delay_config,
                             #[cfg(feature = "browser")]
                             browser,
                         };
@@ -269,6 +289,155 @@ impl Crawler {
     ) -> anyhow::Result<(Page, Vec<(Url, usize)>)> {
         info!("Crawling: {} (depth: {})", url, depth);
 
+        // Check if we should use browser mode for this URL
+        #[cfg(feature = "browser")]
+        let use_browser = context.browser.is_some() && Self::should_use_browser(&url);
+
+        // Use browser or HTTP client based on configuration
+        #[cfg(feature = "browser")]
+        if use_browser {
+            return Self::crawl_page_with_browser(url, depth, context).await;
+        }
+
+        // Default HTTP-based crawling
+        Self::crawl_page_with_http(url, depth, context).await
+    }
+
+    /// Determine if we should use browser for this URL
+    /// Browser is useful for HTML pages but not for API endpoints or static files
+    #[cfg(feature = "browser")]
+    fn should_use_browser(url: &Url) -> bool {
+        let path = url.path();
+        // Don't use browser for known static/API resources
+        if path.ends_with(".js")
+            || path.ends_with(".json")
+            || path.ends_with(".css")
+            || path.ends_with(".jpg")
+            || path.ends_with(".png")
+            || path.ends_with(".gif")
+            || path.ends_with(".svg")
+            || path.ends_with(".xml")
+            || path.ends_with(".frame") // .frame files contain endpoint definitions (custom format)
+            || path.contains("/api/")
+        {
+            return false;
+        }
+        // Use browser for likely HTML pages
+        true
+    }
+
+    /// Crawl a page using headless browser
+    /// 
+    /// # Known Limitations
+    /// - Body content is not returned (empty string) to reduce memory usage
+    /// - Secret scanning is not performed in browser mode
+    /// - Future enhancement: Extract rendered HTML from browser
+    #[cfg(feature = "browser")]
+    async fn crawl_page_with_browser(
+        url: Url,
+        depth: usize,
+        context: CrawlPageContext,
+    ) -> anyhow::Result<(Page, Vec<(Url, usize)>)> {
+        info!("Crawling with browser: {} (depth: {})", url, depth);
+
+        let browser = context
+            .browser
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Browser not initialized"))?;
+
+        // Load page with browser
+        let result = browser.load_page(&url).await.map_err(|e| {
+            anyhow::anyhow!("Browser page load failed for {}: {}", url, e)
+        })?;
+
+        // Convert browser links (strings) to Urls
+        let mut links = Vec::new();
+        for link_str in &result.links {
+            match Url::parse(link_str) {
+                Ok(link_url) => links.push(link_url),
+                Err(_) => {
+                    // Try resolving relative URL
+                    if let Ok(resolved) = url.join(link_str) {
+                        links.push(resolved);
+                    }
+                }
+            }
+        }
+
+        // Add network requests as additional URLs to crawl (API endpoints discovered)
+        for network_req in &result.network_requests {
+            // Parse network request URL and add to links
+            if let Ok(req_url) = Url::parse(&network_req.url) {
+                // Only add if it's in scope and looks interesting
+                if context.scope_validator.is_in_scope(&req_url) {
+                    // Prioritize API endpoints
+                    if network_req.url.contains("/api/")
+                        || network_req.url.contains("/graphql")
+                        || network_req.url.contains("/v1/")
+                        || network_req.url.contains("/v2/")
+                        || network_req.resource_type.contains("XHR")
+                        || network_req.resource_type.contains("Fetch")
+                    {
+                        info!(
+                            "Adding API endpoint from network request: {} {}",
+                            network_req.method, network_req.url
+                        );
+                        links.push(req_url);
+                    }
+                }
+            }
+        }
+
+        // If aggressive mode, generate URL variants
+        if context.aggressive {
+            let mut variants = Vec::new();
+            for link in &links {
+                variants.extend(context.url_normalizer.normalize(link));
+                variants.extend(context.url_normalizer.generate_api_variations(link));
+            }
+            links.extend(variants);
+        }
+
+        // Deduplicate links
+        let mut seen = std::collections::HashSet::new();
+        links.retain(|link| {
+            let canonical = context.url_normalizer.canonicalize(link);
+            seen.insert(canonical)
+        });
+
+        // Create page object with empty body
+        // TODO: Extract rendered HTML from browser for body content
+        let mut page = Page::new(result.url.clone(), result.status_code, String::new(), depth);
+        page.links = links.clone();
+        page.content_type = Some("text/html".to_string());
+
+        // Note: Secret scanning is skipped in browser mode due to empty body
+        // Future enhancement: Scan network request payloads for secrets
+
+        // Filter links by scope and depth
+        let new_urls: Vec<(Url, usize)> = links
+            .into_iter()
+            .filter(|link| context.scope_validator.is_in_scope(link))
+            .filter(|_| depth < context.max_depth)
+            .map(|link| (link, depth + 1))
+            .collect();
+
+        Ok((page, new_urls))
+    }
+
+    /// Crawl a page using HTTP client
+    async fn crawl_page_with_http(
+        url: Url,
+        depth: usize,
+        context: CrawlPageContext,
+    ) -> anyhow::Result<(Page, Vec<(Url, usize)>)> {
+        // Apply request delay if configured (for WAF evasion)
+        if let Some(ref delay_config) = context.delay_config {
+            let delay = delay_config.get_delay();
+            debug!("Applying request delay: {:?}", delay);
+            tokio::time::sleep(delay).await;
+        }
+        
         // Fetch the page
         let response = context.http_client.fetch(&url).await?;
 
@@ -423,5 +592,37 @@ mod tests {
         let config = Config::default();
         let crawler = Crawler::new(config);
         assert!(crawler.is_ok());
+    }
+
+    #[cfg(feature = "browser")]
+    #[test]
+    fn test_should_use_browser() {
+        // HTML pages should use browser
+        let html_url = Url::parse("https://example.com/page.html").unwrap();
+        assert!(Crawler::should_use_browser(&html_url));
+
+        let root_url = Url::parse("https://example.com/").unwrap();
+        assert!(Crawler::should_use_browser(&root_url));
+
+        // Static files should NOT use browser
+        let js_url = Url::parse("https://example.com/app.js").unwrap();
+        assert!(!Crawler::should_use_browser(&js_url));
+
+        let json_url = Url::parse("https://example.com/data.json").unwrap();
+        assert!(!Crawler::should_use_browser(&json_url));
+
+        let css_url = Url::parse("https://example.com/style.css").unwrap();
+        assert!(!Crawler::should_use_browser(&css_url));
+
+        // API endpoints should NOT use browser
+        let api_url = Url::parse("https://example.com/api/users").unwrap();
+        assert!(!Crawler::should_use_browser(&api_url));
+
+        // Images should NOT use browser
+        let img_url = Url::parse("https://example.com/image.png").unwrap();
+        assert!(!Crawler::should_use_browser(&img_url));
+
+        let jpg_url = Url::parse("https://example.com/photo.jpg").unwrap();
+        assert!(!Crawler::should_use_browser(&jpg_url));
     }
 }

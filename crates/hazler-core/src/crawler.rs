@@ -273,7 +273,7 @@ impl Crawler {
         #[cfg(feature = "browser")]
         let use_browser = context.browser.is_some() && Self::should_use_browser(&url);
         #[cfg(not(feature = "browser"))]
-        let use_browser = false;
+        let _use_browser = false;
 
         // Use browser or HTTP client based on configuration
         #[cfg(feature = "browser")]
@@ -562,5 +562,37 @@ mod tests {
         let config = Config::default();
         let crawler = Crawler::new(config);
         assert!(crawler.is_ok());
+    }
+
+    #[cfg(feature = "browser")]
+    #[test]
+    fn test_should_use_browser() {
+        // HTML pages should use browser
+        let html_url = Url::parse("https://example.com/page.html").unwrap();
+        assert!(Crawler::should_use_browser(&html_url));
+
+        let root_url = Url::parse("https://example.com/").unwrap();
+        assert!(Crawler::should_use_browser(&root_url));
+
+        // Static files should NOT use browser
+        let js_url = Url::parse("https://example.com/app.js").unwrap();
+        assert!(!Crawler::should_use_browser(&js_url));
+
+        let json_url = Url::parse("https://example.com/data.json").unwrap();
+        assert!(!Crawler::should_use_browser(&json_url));
+
+        let css_url = Url::parse("https://example.com/style.css").unwrap();
+        assert!(!Crawler::should_use_browser(&css_url));
+
+        // API endpoints should NOT use browser
+        let api_url = Url::parse("https://example.com/api/users").unwrap();
+        assert!(!Crawler::should_use_browser(&api_url));
+
+        // Images should NOT use browser
+        let img_url = Url::parse("https://example.com/image.png").unwrap();
+        assert!(!Crawler::should_use_browser(&img_url));
+
+        let jpg_url = Url::parse("https://example.com/photo.jpg").unwrap();
+        assert!(!Crawler::should_use_browser(&jpg_url));
     }
 }

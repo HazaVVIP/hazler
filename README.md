@@ -7,6 +7,7 @@ A fast, efficient, and human-friendly web crawler built in Rust with built-in se
 - ✅ **Human-Friendly Output** - Beautiful tree view with colors and clear formatting (default)
 - ✅ **Stealth Mode** - WAF evasion enabled by default for better success rates
 - ✅ **Secret Scanning** - Automatic detection of API keys, tokens, and credentials (enabled by default)
+- ✅ **Headless Browser Support** - Crawl modern SPAs (React, Vue, Angular) with JavaScript execution
 - ✅ HTTP-only crawling with concurrent request handling
 - ✅ HTML parsing and link extraction
 - ✅ **JavaScript endpoint discovery** with regex-based extraction
@@ -209,6 +210,27 @@ If you need faster crawling and don't need stealth or secret scanning:
 hazler https://example.com --no-stealth --no-secrets
 ```
 
+#### Crawl JavaScript-Heavy Sites (SPAs)
+For modern single-page applications that require JavaScript execution:
+```bash
+hazler https://react-app.com --browser
+```
+
+This enables the headless browser to:
+- Execute JavaScript and render dynamic content
+- Capture API calls made by the application
+- Discover hidden endpoints loaded via JavaScript
+- Extract content from React, Vue, Angular, and other SPAs
+
+Advanced browser options:
+```bash
+# With screenshots
+hazler https://app.com --browser --screenshot-path ./screenshots/
+
+# Faster crawling (disable images)
+hazler https://app.com --browser --disable-images
+```
+
 ## Usage
 
 ### Basic usage
@@ -246,6 +268,9 @@ Options:
       --proxy <PROXY>                  Proxy URL (e.g., socks5://localhost:1080, http://proxy:8080)
       --strict-domain                  Only crawl the exact domain (no subdomains)
       --subs                           Allow crawling subdomains
+      --browser                        Enable headless browser for JavaScript-heavy sites (SPAs)
+      --screenshot-path <PATH>         Save screenshots when using browser
+      --disable-images                 Disable images in browser for faster loading
   -v, --verbose                        Verbose output
   -h, --help                           Print help
   -V, --version                        Print version
@@ -344,6 +369,23 @@ hazler https://example.com --report
 Verbose logging:
 ```bash
 hazler https://example.com -v
+```
+
+**Headless Browser (for JavaScript-heavy sites):**
+
+Crawl a React/Vue/Angular application with JavaScript execution:
+```bash
+hazler https://react-app.com --browser
+```
+
+Crawl with screenshots:
+```bash
+hazler https://spa-app.com --browser --screenshot-path ./screenshots/
+```
+
+Faster browser crawling (disable images):
+```bash
+hazler https://app.com --browser --disable-images
 ```
 
 ## Security Reconnaissance Features

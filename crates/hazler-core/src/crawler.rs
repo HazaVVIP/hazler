@@ -160,6 +160,8 @@ impl Crawler {
                     let aggressive = self.config.aggressive_discovery;
                     let secret_scanner = self.secret_scanner.clone();
                     let noise_filter = Arc::clone(&noise_filter);
+                    #[cfg(feature = "browser")]
+                    let browser = self.browser.clone();
 
                     let task = tokio::spawn(async move {
                         let _permit = match semaphore.acquire().await {
@@ -180,6 +182,8 @@ impl Crawler {
                             aggressive,
                             secret_scanner,
                             noise_filter,
+                            #[cfg(feature = "browser")]
+                            browser,
                         };
                         Self::crawl_page(url, depth, context).await
                     });

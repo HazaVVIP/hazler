@@ -334,13 +334,41 @@ impl Browser {
 }
 
 #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore] // Requires Chrome/Chromium to be installed
     async fn test_browser_creation() {
         let config = BrowserConfig::default();
         let result = Browser::new(config).await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_browser_config_default() {
+        let config = BrowserConfig::default();
+        assert_eq!(config.headless, true);
+        assert_eq!(config.timeout_secs, 30);
+        assert_eq!(config.window_width, 1920);
+        assert_eq!(config.window_height, 1080);
+    }
+
+    #[test]
+    fn test_network_request_structure() {
+        let req = NetworkRequest {
+            url: "https://api.example.com/users".to_string(),
+            method: "GET".to_string(),
+            headers: std::collections::HashMap::new(),
+            post_data: None,
+            resource_type: "XHR".to_string(),
+            request_id: "123".to_string(),
+            timestamp: 0.0,
+        };
+        
+        assert_eq!(req.url, "https://api.example.com/users");
+        assert_eq!(req.method, "GET");
+        assert_eq!(req.resource_type, "XHR");
     }
 }

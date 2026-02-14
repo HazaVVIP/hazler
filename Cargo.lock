@@ -824,6 +824,7 @@ dependencies = [
  "hazler-js-parser",
  "hazler-parser",
  "hazler-secrets",
+ "rand",
  "serde",
  "serde_json",
  "thiserror",

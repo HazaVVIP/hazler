@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::delay::DelayConfig;
 use crate::noise_filter::NoiseFilter;
 use crate::normalizer::AdvancedUrlNormalizer;
 use crate::queue::UrlQueue;
@@ -11,7 +12,7 @@ use hazler_secrets::SecretScanner;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::Semaphore;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 #[cfg(feature = "browser")]
@@ -29,6 +30,7 @@ struct CrawlPageContext {
     aggressive: bool,
     secret_scanner: Option<SecretScanner>,
     noise_filter: Arc<Mutex<NoiseFilter>>,
+    delay_config: Option<DelayConfig>,
     #[cfg(feature = "browser")]
     browser: Option<Arc<Browser>>,
 }
@@ -135,6 +137,13 @@ impl Crawler {
 
         // Create noise filter for smart rate limiting
         let noise_filter = Arc::new(Mutex::new(NoiseFilter::with_threshold(5)));
+        
+        // Configure request timing if stealth mode is enabled
+        let delay_config = if self.config.stealth_mode {
+            Some(DelayConfig::stealth())
+        } else {
+            None
+        };
 
         // Add the starting URL
         queue.push(start_url.clone(), 0);
@@ -169,6 +178,7 @@ impl Crawler {
                     let aggressive = self.config.aggressive_discovery;
                     let secret_scanner = self.secret_scanner.clone();
                     let noise_filter = Arc::clone(&noise_filter);
+                    let delay_config = delay_config.clone();
                     #[cfg(feature = "browser")]
                     let browser = self.browser.clone();
 
@@ -191,6 +201,7 @@ impl Crawler {
                             aggressive,
                             secret_scanner,
                             noise_filter,
+                            delay_config,
                             #[cfg(feature = "browser")]
                             browser,
                         };
@@ -420,6 +431,13 @@ impl Crawler {
         depth: usize,
         context: CrawlPageContext,
     ) -> anyhow::Result<(Page, Vec<(Url, usize)>)> {
+        // Apply request delay if configured (for WAF evasion)
+        if let Some(ref delay_config) = context.delay_config {
+            let delay = delay_config.get_delay();
+            debug!("Applying request delay: {:?}", delay);
+            tokio::time::sleep(delay).await;
+        }
+        
         // Fetch the page
         let response = context.http_client.fetch(&url).await?;
 

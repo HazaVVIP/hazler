@@ -85,6 +85,7 @@
 
 pub mod config;
 pub mod crawler;
+pub mod delay;
 pub mod noise_filter;
 pub mod normalizer;
 pub mod queue;
@@ -93,6 +94,7 @@ pub mod types;
 
 pub use config::Config;
 pub use crawler::Crawler;
+pub use delay::DelayConfig;
 pub use noise_filter::{NoiseFilter, NoiseFilterStats, ResponsePattern};
 pub use normalizer::AdvancedUrlNormalizer;
 pub use queue::UrlQueue;

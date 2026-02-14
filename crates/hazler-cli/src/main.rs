@@ -238,9 +238,7 @@ async fn main() {
         }
     }
 
-    // Create and run crawler
-    // Note: Declared as mutable to support browser initialization via init_browser()
-    // when the browser feature is enabled
+    // Create and run crawler (mutable to support browser initialization)
     let mut crawler = match Crawler::new(config) {
         Ok(c) => c,
         Err(e) => {

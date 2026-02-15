@@ -255,7 +255,7 @@ Options:
   -p, --max-pages <MAX_PAGES>          Maximum number of pages to crawl (0 = unlimited) [default: 0]
   -u, --user-agent <USER_AGENT>        Custom user agent string [default: Hazler/0.1.0]
   -t, --timeout <TIMEOUT>              Request timeout in seconds [default: 10]
-  -o, --output-format <OUTPUT_FORMAT>  Output format (json, jsonl, urls, csv, or tree) [default: tree]
+  -o, --output-format <OUTPUT_FORMAT>  Output format (json, jsonl, urls, csv, tree, nuclei, ffuf, or burp) [default: tree]
       --include-body                   Include response body in output (excluded by default)
       --fields <FIELDS>                Select specific fields to output (comma-separated)
       --aggressive                     Enable aggressive endpoint discovery mode
@@ -331,6 +331,27 @@ hazler https://example.com -o urls > urls.txt
 Output as CSV:
 ```bash
 hazler https://example.com -o csv > results.csv
+```
+
+Output as Nuclei JSON format (for vulnerability scanners):
+```bash
+hazler https://example.com -o nuclei > nuclei-results.json
+```
+
+Output as ffuf JSON format (for web fuzzers):
+```bash
+hazler https://example.com -o ffuf > ffuf-results.json
+```
+
+Output as Burp Suite XML (for Burp Suite integration):
+```bash
+hazler https://example.com -o burp > burp-sitemap.xml
+```
+
+Pipeline mode - read URLs from stdin:
+```bash
+cat urls.txt | hazler - -o urls
+echo "https://example.com" | hazler - -o json
 ```
 
 Disable stealth and secrets for faster crawling:
@@ -584,6 +605,102 @@ Comma-separated values with headers:
 url,status_code,depth,content_type,num_links
 "https://example.com/",200,0,"text/html",10
 "https://example.com/page1",200,1,"text/html",5
+```
+
+### Nuclei
+Nuclei JSON format for vulnerability scanner integration (JSON Lines):
+```json
+{"template-id":"hazler-crawl-result","info":{"name":"Web Crawl Result","severity":"info","tags":["hazler","crawl"]},"type":"http","host":"https://example.com","matched-at":"https://example.com/","extracted-results":[],"timestamp":"2026-02-15T00:00:00Z","matcher-status":true,"metadata":{"status_code":200,"depth":0,"content_type":"text/html","num_links":10}}
+```
+
+Usage:
+```bash
+hazler https://example.com -o nuclei > nuclei-results.json
+nuclei -l nuclei-results.json -t templates/
+```
+
+### ffuf
+ffuf JSON format for web fuzzer integration (JSON Lines):
+```json
+{"input":{"URL":"https://example.com/"},"position":1,"status":200,"length":1234,"words":100,"lines":50,"content-type":"text/html","redirectlocation":"","url":"https://example.com/","resultfile":"","metadata":{"depth":0,"num_links":10,"secrets_found":0}}
+```
+
+Usage:
+```bash
+hazler https://example.com -o ffuf > ffuf-results.json
+# Process with ffuf filters or custom scripts
+```
+
+### Burp Suite XML
+Burp Suite XML sitemap format for importing into Burp Suite:
+```xml
+<?xml version="1.0"?>
+<!DOCTYPE items [...]>
+<items burpVersion="Hazler-0.1.0">
+  <item>
+    <time>Sun Feb 15 00:00:00 UTC 2026</time>
+    <url>https://example.com/</url>
+    <host>example.com</host>
+    <port>443</port>
+    <protocol>https</protocol>
+    <method>GET</method>
+    <path>/</path>
+    <request base64="true">...</request>
+    <status>200</status>
+    <responselength>1234</responselength>
+    <mimetype>HTML</mimetype>
+    <response base64="true">...</response>
+  </item>
+</items>
+```
+
+Usage:
+```bash
+hazler https://example.com -o burp > sitemap.xml
+# Import into Burp Suite: Target → Site map → Import
+```
+
+## Pipeline Mode
+
+Hazler supports pipeline mode for processing multiple URLs from stdin, enabling seamless integration with other tools:
+
+### Basic Pipeline Usage
+
+Read URLs from a file:
+```bash
+cat urls.txt | hazler - -o urls
+```
+
+Chain with other tools:
+```bash
+echo "https://example.com" | hazler - -o json | jq '.pages[].url'
+```
+
+Process subdomain enumeration results:
+```bash
+subfinder -d example.com | httpx -silent | hazler - -o nuclei > results.json
+```
+
+### Pipeline Examples
+
+Crawl multiple targets and extract endpoints:
+```bash
+cat targets.txt | hazler - -d 2 -o urls > all-endpoints.txt
+```
+
+Find secrets across multiple sites:
+```bash
+cat sites.txt | hazler - --all -o json | jq '.pages[] | select(.secrets | length > 0)'
+```
+
+Integration with bug bounty workflows:
+```bash
+# Enumerate subdomains → Check live hosts → Crawl → Extract parameters
+subfinder -d target.com | \
+  httpx -silent -status-code -title | \
+  cut -d' ' -f1 | \
+  hazler - --aggressive -o urls | \
+  grep "?" > params.txt
 ```
 
 ## Output Processing Examples

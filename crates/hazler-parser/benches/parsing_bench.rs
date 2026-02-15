@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use hazler_parser::HtmlParser;
 use url::Url;
 
@@ -46,24 +46,20 @@ fn bench_html_parsing(c: &mut Criterion) {
     let base_url = Url::parse("https://example.com").unwrap();
 
     let mut group = c.benchmark_group("html_parsing");
-    
+
     group.bench_function("parse_small_html", |b| {
-        b.iter(|| {
-            parser.parse(black_box(SMALL_HTML), black_box(&base_url))
-        });
+        b.iter(|| parser.extract_links(black_box(SMALL_HTML), black_box(&base_url)));
     });
 
     group.bench_function("parse_medium_html", |b| {
-        b.iter(|| {
-            parser.parse(black_box(MEDIUM_HTML), black_box(&base_url))
-        });
+        b.iter(|| parser.extract_links(black_box(MEDIUM_HTML), black_box(&base_url)));
     });
 
     // Benchmark repeated parsing (cache test)
     group.bench_function("parse_repeated", |b| {
         b.iter(|| {
             for _ in 0..100 {
-                parser.parse(black_box(SMALL_HTML), black_box(&base_url));
+                let _ = parser.extract_links(black_box(SMALL_HTML), black_box(&base_url));
             }
         });
     });
@@ -77,15 +73,15 @@ fn bench_link_extraction(c: &mut Criterion) {
 
     c.bench_function("extract_links_small", |b| {
         b.iter(|| {
-            let result = parser.parse(black_box(SMALL_HTML), black_box(&base_url));
-            black_box(result.urls.len())
+            let result = parser.extract_links(black_box(SMALL_HTML), black_box(&base_url));
+            black_box(result.map(|urls| urls.len()))
         });
     });
 
     c.bench_function("extract_links_medium", |b| {
         b.iter(|| {
-            let result = parser.parse(black_box(MEDIUM_HTML), black_box(&base_url));
-            black_box(result.urls.len())
+            let result = parser.extract_links(black_box(MEDIUM_HTML), black_box(&base_url));
+            black_box(result.map(|urls| urls.len()))
         });
     });
 }

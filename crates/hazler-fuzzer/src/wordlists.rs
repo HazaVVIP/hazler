@@ -161,36 +161,11 @@ pub static COMMON_PARAMS: Lazy<Vec<&'static str>> = Lazy::new(|| {
 pub static FILE_EXTENSIONS: Lazy<Vec<&'static str>> = Lazy::new(|| {
     vec![
         // Data formats
-        "json",
-        "xml",
-        "yaml",
-        "yml",
-        "csv",
-        "txt",
-        // Web formats
-        "html",
-        "htm",
-        "xhtml",
-        // Server-side scripts
-        "php",
-        "asp",
-        "aspx",
-        "jsp",
-        "jspx",
-        // Other formats
-        "pdf",
-        "doc",
-        "docx",
-        "xls",
-        "xlsx",
-        // Backup/Config
-        "bak",
-        "backup",
-        "old",
-        "config",
-        "conf",
-        "cfg",
-        "ini",
+        "json", "xml", "yaml", "yml", "csv", "txt", // Web formats
+        "html", "htm", "xhtml", // Server-side scripts
+        "php", "asp", "aspx", "jsp", "jspx", // Other formats
+        "pdf", "doc", "docx", "xls", "xlsx", // Backup/Config
+        "bak", "backup", "old", "config", "conf", "cfg", "ini",
     ]
 });
 
@@ -221,7 +196,10 @@ mod tests {
     #[test]
     fn test_endpoints_not_empty() {
         let endpoints = Wordlists::endpoints();
-        assert!(!endpoints.is_empty(), "Endpoints wordlist should not be empty");
+        assert!(
+            !endpoints.is_empty(),
+            "Endpoints wordlist should not be empty"
+        );
         assert!(endpoints.len() > 50, "Should have at least 50 endpoints");
     }
 
@@ -235,7 +213,10 @@ mod tests {
     #[test]
     fn test_extensions_not_empty() {
         let extensions = Wordlists::extensions();
-        assert!(!extensions.is_empty(), "Extensions wordlist should not be empty");
+        assert!(
+            !extensions.is_empty(),
+            "Extensions wordlist should not be empty"
+        );
         assert!(extensions.len() > 20, "Should have at least 20 extensions");
     }
 
@@ -243,15 +224,27 @@ mod tests {
     fn test_common_endpoints_include_api() {
         let endpoints = Wordlists::endpoints();
         assert!(endpoints.contains(&"api"), "Should include 'api' endpoint");
-        assert!(endpoints.contains(&"users"), "Should include 'users' endpoint");
-        assert!(endpoints.contains(&"admin"), "Should include 'admin' endpoint");
+        assert!(
+            endpoints.contains(&"users"),
+            "Should include 'users' endpoint"
+        );
+        assert!(
+            endpoints.contains(&"admin"),
+            "Should include 'admin' endpoint"
+        );
     }
 
     #[test]
     fn test_common_params_include_id() {
         let params = Wordlists::params();
         assert!(params.contains(&"id"), "Should include 'id' parameter");
-        assert!(params.contains(&"user_id"), "Should include 'user_id' parameter");
-        assert!(params.contains(&"token"), "Should include 'token' parameter");
+        assert!(
+            params.contains(&"user_id"),
+            "Should include 'user_id' parameter"
+        );
+        assert!(
+            params.contains(&"token"),
+            "Should include 'token' parameter"
+        );
     }
 }

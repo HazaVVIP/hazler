@@ -6,6 +6,7 @@ use url::Url;
 #[derive(Clone)]
 pub struct GraphQLParser {
     /// Maximum schema size to process (in bytes)
+    #[allow(dead_code)]
     max_schema_size: usize,
 }
 
@@ -92,13 +93,18 @@ impl GraphQLParser {
         }
 
         // Check for GraphQL error patterns
-        if content.contains("GraphQL") || content.contains("graphql-go") || content.contains("apollo") {
+        if content.contains("GraphQL")
+            || content.contains("graphql-go")
+            || content.contains("apollo")
+        {
             confidence += 0.2;
             indicators.push("Content mentions GraphQL libraries".to_string());
         }
 
         // Check for typical GraphQL response structure
-        if content.contains(r#""data":"#) || (content.contains(r#""data""#) && content.contains(r#""errors""#)) {
+        if content.contains(r#""data":"#)
+            || (content.contains(r#""data""#) && content.contains(r#""errors""#))
+        {
             confidence += 0.15;
             indicators.push("Content has GraphQL response structure".to_string());
         }
@@ -209,7 +215,9 @@ fragment TypeRef on __Type {
         let schema = json
             .get("data")
             .and_then(|d| d.get("__schema"))
-            .ok_or_else(|| crate::error::Error::ParseError("Invalid introspection response".into()))?;
+            .ok_or_else(|| {
+                crate::error::Error::ParseError("Invalid introspection response".into())
+            })?;
 
         // Extract types
         let types: Vec<GraphQLType> = schema
@@ -372,7 +380,8 @@ fragment TypeRef on __Type {
 
         // Generate samples for queries
         for query in &schema.queries {
-            if let Some(sample) = self.generate_sample_operation("query", &query.name, &query.args) {
+            if let Some(sample) = self.generate_sample_operation("query", &query.name, &query.args)
+            {
                 samples.push(sample);
             }
         }
@@ -386,7 +395,9 @@ fragment TypeRef on __Type {
 
         // Generate samples for mutations
         for mutation in &schema.mutations {
-            if let Some(sample) = self.generate_sample_operation("mutation", &mutation.name, &mutation.args) {
+            if let Some(sample) =
+                self.generate_sample_operation("mutation", &mutation.name, &mutation.args)
+            {
                 samples.push(sample);
             }
         }
@@ -395,7 +406,12 @@ fragment TypeRef on __Type {
     }
 
     /// Generate a sample operation (query or mutation)
-    fn generate_sample_operation(&self, op_type: &str, name: &str, args: &[GraphQLArgument]) -> Option<String> {
+    fn generate_sample_operation(
+        &self,
+        op_type: &str,
+        name: &str,
+        args: &[GraphQLArgument],
+    ) -> Option<String> {
         if args.is_empty() {
             Some(format!("{} {{\n  {}\n}}", op_type, name))
         } else {
@@ -414,8 +430,7 @@ fragment TypeRef on __Type {
 
     /// Generate example value for a GraphQL type
     fn generate_example_value(&self, type_info: &str) -> String {
-        if type_info.ends_with('!') {
-            let inner = &type_info[..type_info.len() - 1];
+        if let Some(inner) = type_info.strip_suffix('!') {
             return self.generate_example_value(inner);
         }
 

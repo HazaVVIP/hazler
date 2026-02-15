@@ -24,17 +24,17 @@
 //! println!("Similarity: {:.2}%", similarity * 100.0);
 //! ```
 
-mod simhash;
-mod clustering;
-mod noise_filter;
 mod baseline;
 mod change_detection;
+mod clustering;
+mod noise_filter;
+mod simhash;
 
+pub use baseline::{BaselineManager, BaselineStorage};
+pub use change_detection::{ChangeDetector, ChangeType, ResponseChange};
+pub use clustering::{ClusteringAlgorithm, DBSCANClusterer, KMeansClusterer, ResponseCluster};
+pub use noise_filter::{NormalizedResponse, ResponseNormalizer};
 pub use simhash::{SimHash, SimHashCalculator};
-pub use clustering::{ResponseCluster, ClusteringAlgorithm, KMeansClusterer, DBSCANClusterer};
-pub use noise_filter::{ResponseNormalizer, NormalizedResponse};
-pub use baseline::{BaselineStorage, BaselineManager};
-pub use change_detection::{ChangeDetector, ResponseChange, ChangeType};
 
 use serde::{Deserialize, Serialize};
 

@@ -13,12 +13,8 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
 
     // Create PDF document
-    let (doc, page1, layer1) = PdfDocument::new(
-        "Hazler Crawl Report",
-        Mm(210.0),
-        Mm(297.0),
-        "Layer 1",
-    );
+    let (doc, page1, layer1) =
+        PdfDocument::new("Hazler Crawl Report", Mm(210.0), Mm(297.0), "Layer 1");
     let current_layer = doc.get_page(page1).get_layer(layer1);
 
     // Load fonts
@@ -168,8 +164,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     for (code, count) in codes.iter().take(10) {
         if y_pos < 30.0 {
             // Add new page if needed
-            let (page_idx, layer_idx) =
-                doc.add_page(Mm(210.0), Mm(297.0), "Layer");
+            let (page_idx, layer_idx) = doc.add_page(Mm(210.0), Mm(297.0), "Layer");
             let _current_layer = doc.get_page(page_idx).get_layer(layer_idx);
             y_pos = 280.0;
         }
@@ -192,7 +187,13 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
         y_pos = 280.0;
     }
 
-    current_layer.use_text("Crawled Pages (Top 20)", 16.0, Mm(20.0), Mm(y_pos), &font_bold);
+    current_layer.use_text(
+        "Crawled Pages (Top 20)",
+        16.0,
+        Mm(20.0),
+        Mm(y_pos),
+        &font_bold,
+    );
     y_pos -= 10.0;
 
     for (i, page) in result.pages.iter().take(20).enumerate() {

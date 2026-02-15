@@ -7,7 +7,7 @@ use crate::scope::ScopeValidator;
 use crate::types::{CrawlResult, Finding, FindingStats, Page, Severity};
 use hazler_http::HttpClient;
 use hazler_js_parser::{FrameFileParser, JavaScriptParser, SourceMapParser};
-use hazler_parser::{HtmlParser, GraphQLParser};
+use hazler_parser::{GraphQLParser, HtmlParser};
 use hazler_secrets::SecretScanner;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -59,7 +59,7 @@ impl Crawler {
     pub fn new(config: Config) -> anyhow::Result<Self> {
         let mut http_client =
             HttpClient::new(&config.user_agent, Duration::from_secs(config.timeout_secs))?;
-        
+
         // Enable User-Agent rotation and Chrome hints if stealth mode is enabled
         if config.stealth_mode {
             http_client = http_client
@@ -67,7 +67,7 @@ impl Crawler {
                 .with_chrome_hints(true);
             info!("Stealth mode enabled: User-Agent rotation and Chrome hints activated");
         }
-        
+
         let parser = HtmlParser::new();
         let js_parser = JavaScriptParser::new()
             .map_err(|e| anyhow::anyhow!("Failed to create JS parser: {}", e))?;
@@ -104,7 +104,7 @@ impl Crawler {
     pub async fn init_browser(&mut self) -> anyhow::Result<()> {
         if self.config.use_headless_browser {
             info!("Initializing headless browser...");
-            
+
             let browser_config = BrowserConfig {
                 headless: true,
                 timeout_secs: self.config.timeout_secs,
@@ -120,7 +120,7 @@ impl Crawler {
             let browser = Browser::new(browser_config)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to initialize browser: {}", e))?;
-            
+
             self.browser = Some(Arc::new(browser));
             info!("Browser initialized successfully");
         }
@@ -147,7 +147,7 @@ impl Crawler {
 
         // Create noise filter for smart rate limiting
         let noise_filter = Arc::new(Mutex::new(NoiseFilter::with_threshold(5)));
-        
+
         // Configure request timing if stealth mode is enabled
         let delay_config = if self.config.stealth_mode {
             Some(DelayConfig::stealth())
@@ -345,7 +345,7 @@ impl Crawler {
     }
 
     /// Crawl a page using headless browser
-    /// 
+    ///
     /// # Known Limitations
     /// - Body content is not returned (empty string) to reduce memory usage
     /// - Secret scanning is not performed in browser mode
@@ -364,9 +364,10 @@ impl Crawler {
             .ok_or_else(|| anyhow::anyhow!("Browser not initialized"))?;
 
         // Load page with browser
-        let result = browser.load_page(&url).await.map_err(|e| {
-            anyhow::anyhow!("Browser page load failed for {}: {}", url, e)
-        })?;
+        let result = browser
+            .load_page(&url)
+            .await
+            .map_err(|e| anyhow::anyhow!("Browser page load failed for {}: {}", url, e))?;
 
         // Convert browser links (strings) to Urls
         let mut links = Vec::new();
@@ -455,7 +456,7 @@ impl Crawler {
             debug!("Applying request delay: {:?}", delay);
             tokio::time::sleep(delay).await;
         }
-        
+
         // Fetch the page
         let response = context.http_client.fetch(&url).await?;
 
@@ -498,7 +499,10 @@ impl Crawler {
             }
 
             // Check for GraphQL endpoint references in HTML
-            if let Some(graphql_endpoint) = context.graphql_parser.detect_graphql_endpoint(&url, &response.body) {
+            if let Some(graphql_endpoint) = context
+                .graphql_parser
+                .detect_graphql_endpoint(&url, &response.body)
+            {
                 info!(
                     "GraphQL endpoint detected at {} (confidence: {:.2})",
                     graphql_endpoint.url, graphql_endpoint.confidence
@@ -520,7 +524,10 @@ impl Crawler {
             links = extracted;
 
             // Check for GraphQL endpoint
-            if let Some(graphql_endpoint) = context.graphql_parser.detect_graphql_endpoint(&url, &response.body) {
+            if let Some(graphql_endpoint) = context
+                .graphql_parser
+                .detect_graphql_endpoint(&url, &response.body)
+            {
                 info!(
                     "GraphQL endpoint detected at {} (confidence: {:.2})",
                     graphql_endpoint.url, graphql_endpoint.confidence
@@ -530,7 +537,9 @@ impl Crawler {
 
             // Check for source map references in JS files
             if context.parse_source_maps && url.path().ends_with(".js") {
-                let source_map_refs = context.sourcemap_parser.detect_source_map_references(&response.body, &url);
+                let source_map_refs = context
+                    .sourcemap_parser
+                    .detect_source_map_references(&response.body, &url);
                 if !source_map_refs.is_empty() {
                     info!(
                         "Found {} source map reference(s) for {}",
@@ -551,7 +560,9 @@ impl Crawler {
             if context.parse_source_maps && url.path().ends_with(".map") {
                 match context.sourcemap_parser.parse_source_map(&response.body) {
                     Ok(source_map) => {
-                        let analysis = context.sourcemap_parser.analyze_source_map(&source_map, url.as_str());
+                        let analysis = context
+                            .sourcemap_parser
+                            .analyze_source_map(&source_map, url.as_str());
                         let report = context.sourcemap_parser.generate_report(&analysis);
                         info!("{}", report);
                     }

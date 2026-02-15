@@ -45,23 +45,3 @@ lto = true
 codegen-units = 1
 strip = true
 
-[[bench]]
-name = "parsing_bench"
-harness = false
-
-[[bench]]
-name = "url_bench"
-harness = false
-
-[dependencies]
-# Core crates
-hazler-core = { path = "crates/hazler-core" }
-hazler-http = { path = "crates/hazler-http" }
-hazler-parser = { path = "crates/hazler-parser" }
-hazler-cli = { path = "crates/hazler-cli" }
-
-[dev-dependencies]
-criterion = { workspace = true }
-tokio = { workspace = true }
-url = { workspace = true }
-

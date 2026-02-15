@@ -1,5 +1,5 @@
 use colored::Colorize;
-use hazler_fuzzer::{FuzzerConfig, UrlMutator, ParamDiscovery, FuzzStrategy};
+use hazler_fuzzer::{FuzzStrategy, FuzzerConfig, ParamDiscovery, UrlMutator};
 use tracing::info;
 use url::Url;
 
@@ -29,17 +29,17 @@ pub fn apply_fuzzing(
     // Apply URL mutations
     if fuzz || fuzz_endpoints {
         let mutator = UrlMutator::new(config.clone());
-        
+
         for url in urls {
             let mutations = mutator.generate_mutations(url);
-            
+
             eprintln!(
                 "{} Generated {} mutations for {}",
                 "→".bright_blue(),
                 mutations.len().to_string().bright_green(),
                 url.to_string().bright_cyan()
             );
-            
+
             for mutation in mutations {
                 fuzzed_urls.push(mutation.url);
             }
@@ -49,10 +49,10 @@ pub fn apply_fuzzing(
     // Apply parameter discovery
     if fuzz || fuzz_params {
         let param_discovery = ParamDiscovery::new(FuzzStrategy::Individual);
-        
+
         for url in urls {
             let param_urls = param_discovery.generate_param_urls(url);
-            
+
             if !param_urls.is_empty() {
                 eprintln!(
                     "{} Testing {} parameters on {}",
@@ -60,7 +60,7 @@ pub fn apply_fuzzing(
                     param_urls.len().to_string().bright_green(),
                     url.to_string().bright_cyan()
                 );
-                
+
                 fuzzed_urls.extend(param_urls);
             }
         }

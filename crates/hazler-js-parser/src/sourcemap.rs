@@ -86,7 +86,11 @@ impl SourceMapParser {
     }
 
     /// Detect source map references in JavaScript content
-    pub fn detect_source_map_references(&self, js_content: &str, js_url: &Url) -> Vec<SourceMapReference> {
+    pub fn detect_source_map_references(
+        &self,
+        js_content: &str,
+        js_url: &Url,
+    ) -> Vec<SourceMapReference> {
         let mut references = Vec::new();
 
         // Check for sourceMappingURL comment at the end of the file
@@ -137,7 +141,7 @@ impl SourceMapParser {
     /// Extract sourceMappingURL from a line
     fn extract_mapping_url<'a>(&self, line: &'a str) -> Option<&'a str> {
         let trimmed = line.trim();
-        
+
         // Handle //#sourceMappingURL=
         if let Some(idx) = trimmed.find("sourceMappingURL=") {
             let url_start = idx + "sourceMappingURL=".len();
@@ -204,9 +208,8 @@ impl SourceMapParser {
     /// Detect framework from node_modules path
     fn detect_framework_from_path(&self, path: &str, frameworks: &mut HashSet<String>) {
         let common_frameworks = [
-            "react", "vue", "angular", "@angular", "svelte", "next",
-            "nuxt", "gatsby", "express", "fastify", "nest",
-            "redux", "mobx", "axios", "apollo", "graphql"
+            "react", "vue", "angular", "@angular", "svelte", "next", "nuxt", "gatsby", "express",
+            "fastify", "nest", "redux", "mobx", "axios", "apollo", "graphql",
         ];
 
         for framework in &common_frameworks {
@@ -220,17 +223,13 @@ impl SourceMapParser {
     fn extract_directory(&self, path: &str) -> Option<String> {
         let normalized = path.replace('\\', "/");
         let parts: Vec<&str> = normalized.split('/').filter(|p| !p.is_empty()).collect();
-        
+
         if parts.is_empty() {
             return None;
         }
 
         // Skip webpack:// and other protocols
-        let start_idx = if parts[0].ends_with(':') {
-            1
-        } else {
-            0
-        };
+        let start_idx = if parts[0].ends_with(':') { 1 } else { 0 };
 
         if start_idx < parts.len() {
             // Return the first non-empty, meaningful directory
@@ -259,10 +258,11 @@ impl SourceMapParser {
             });
         }
 
-        if lower_path.contains("secret") 
-            || lower_path.contains("credential") 
+        if lower_path.contains("secret")
+            || lower_path.contains("credential")
             || lower_path.contains("password")
-            || lower_path.contains(".env") {
+            || lower_path.contains(".env")
+        {
             return Some(InterestingPath {
                 path: path.to_string(),
                 category: PathCategory::Secret,
@@ -272,7 +272,10 @@ impl SourceMapParser {
         }
 
         // High priority paths
-        if lower_path.contains("/api/") || lower_path.contains("_api") || lower_path.contains("api.") {
+        if lower_path.contains("/api/")
+            || lower_path.contains("_api")
+            || lower_path.contains("api.")
+        {
             return Some(InterestingPath {
                 path: path.to_string(),
                 category: PathCategory::Api,
@@ -281,7 +284,10 @@ impl SourceMapParser {
             });
         }
 
-        if lower_path.contains("auth") || lower_path.contains("login") || lower_path.contains("session") {
+        if lower_path.contains("auth")
+            || lower_path.contains("login")
+            || lower_path.contains("session")
+        {
             return Some(InterestingPath {
                 path: path.to_string(),
                 category: PathCategory::Auth,
@@ -309,7 +315,10 @@ impl SourceMapParser {
             });
         }
 
-        if lower_path.contains("database") || lower_path.contains("db") || lower_path.contains("model") {
+        if lower_path.contains("database")
+            || lower_path.contains("db")
+            || lower_path.contains("model")
+        {
             return Some(InterestingPath {
                 path: path.to_string(),
                 category: PathCategory::Database,
@@ -319,7 +328,10 @@ impl SourceMapParser {
         }
 
         // Low priority but still interesting
-        if lower_path.contains("test") || lower_path.contains("spec") || lower_path.contains("__test__") {
+        if lower_path.contains("test")
+            || lower_path.contains("spec")
+            || lower_path.contains("__test__")
+        {
             return Some(InterestingPath {
                 path: path.to_string(),
                 category: PathCategory::Test,
@@ -334,23 +346,35 @@ impl SourceMapParser {
     /// Generate a summary report from analysis
     pub fn generate_report(&self, analysis: &SourceMapAnalysis) -> String {
         let mut report = String::new();
-        
-        report.push_str(&format!("\n[INFO] Source Map Analysis: {}\n", analysis.map_url));
-        report.push_str(&format!("[INFO] Total sources: {}\n", analysis.total_sources));
-        
+
+        report.push_str(&format!(
+            "\n[INFO] Source Map Analysis: {}\n",
+            analysis.map_url
+        ));
+        report.push_str(&format!(
+            "[INFO] Total sources: {}\n",
+            analysis.total_sources
+        ));
+
         if !analysis.frameworks_detected.is_empty() {
-            report.push_str(&format!("[INFO] Frameworks detected: {}\n", 
-                analysis.frameworks_detected.join(", ")));
+            report.push_str(&format!(
+                "[INFO] Frameworks detected: {}\n",
+                analysis.frameworks_detected.join(", ")
+            ));
         }
 
         if !analysis.project_structure.is_empty() {
-            report.push_str(&format!("[INFO] Project directories: {}\n", 
-                analysis.project_structure.join(", ")));
+            report.push_str(&format!(
+                "[INFO] Project directories: {}\n",
+                analysis.project_structure.join(", ")
+            ));
         }
 
         if !analysis.interesting_paths.is_empty() {
-            report.push_str(&format!("\n[HIGH] Found {} interesting paths:\n", 
-                analysis.interesting_paths.len()));
+            report.push_str(&format!(
+                "\n[HIGH] Found {} interesting paths:\n",
+                analysis.interesting_paths.len()
+            ));
 
             for path_info in &analysis.interesting_paths {
                 let priority_label = match path_info.priority {
@@ -360,8 +384,10 @@ impl SourceMapParser {
                     Priority::Low => "LOW",
                 };
 
-                report.push_str(&format!("  [{}] {} - {}\n", 
-                    priority_label, path_info.path, path_info.reason));
+                report.push_str(&format!(
+                    "  [{}] {} - {}\n",
+                    priority_label, path_info.path, path_info.reason
+                ));
             }
         }
 
@@ -387,10 +413,13 @@ mod tests {
         //# sourceMappingURL=app.js.map
         "#;
         let js_url = Url::parse("https://example.com/static/app.js").unwrap();
-        
+
         let refs = parser.detect_source_map_references(js_content, &js_url);
         assert!(!refs.is_empty());
-        assert_eq!(refs[0].map_url.as_str(), "https://example.com/static/app.js.map");
+        assert_eq!(
+            refs[0].map_url.as_str(),
+            "https://example.com/static/app.js.map"
+        );
     }
 
     #[test]
@@ -401,7 +430,7 @@ mod tests {
         //@ sourceMappingURL=app.js.map
         "#;
         let js_url = Url::parse("https://example.com/static/app.js").unwrap();
-        
+
         let refs = parser.detect_source_map_references(js_content, &js_url);
         assert!(!refs.is_empty());
     }
@@ -485,14 +514,20 @@ mod tests {
         };
 
         let analysis = parser.analyze_source_map(&source_map, "https://example.com/bundle.js.map");
-        
+
         assert_eq!(analysis.total_sources, 4);
         assert!(!analysis.interesting_paths.is_empty());
-        
+
         // Should find admin and api paths
-        assert!(analysis.interesting_paths.iter().any(|p| p.category == PathCategory::Admin));
-        assert!(analysis.interesting_paths.iter().any(|p| p.category == PathCategory::Api));
-        
+        assert!(analysis
+            .interesting_paths
+            .iter()
+            .any(|p| p.category == PathCategory::Admin));
+        assert!(analysis
+            .interesting_paths
+            .iter()
+            .any(|p| p.category == PathCategory::Api));
+
         // Should detect React
         assert!(analysis.frameworks_detected.contains(&"react".to_string()));
     }
@@ -503,20 +538,18 @@ mod tests {
         let analysis = SourceMapAnalysis {
             map_url: "https://example.com/app.js.map".to_string(),
             total_sources: 10,
-            interesting_paths: vec![
-                InterestingPath {
-                    path: "src/admin/panel.tsx".to_string(),
-                    category: PathCategory::Admin,
-                    priority: Priority::Critical,
-                    reason: "Admin panel component detected".to_string(),
-                },
-            ],
+            interesting_paths: vec![InterestingPath {
+                path: "src/admin/panel.tsx".to_string(),
+                category: PathCategory::Admin,
+                priority: Priority::Critical,
+                reason: "Admin panel component detected".to_string(),
+            }],
             frameworks_detected: vec!["react".to_string()],
             project_structure: vec!["src".to_string()],
         };
 
         let report = parser.generate_report(&analysis);
-        
+
         assert!(report.contains("Source Map Analysis"));
         assert!(report.contains("Total sources: 10"));
         assert!(report.contains("react"));
@@ -527,8 +560,14 @@ mod tests {
     #[test]
     fn test_extract_directory() {
         let parser = SourceMapParser::new();
-        
-        assert_eq!(parser.extract_directory("webpack://src/components/Button.tsx"), Some("src".to_string()));
-        assert_eq!(parser.extract_directory("src/admin/Dashboard.tsx"), Some("src".to_string()));
+
+        assert_eq!(
+            parser.extract_directory("webpack://src/components/Button.tsx"),
+            Some("src".to_string())
+        );
+        assert_eq!(
+            parser.extract_directory("src/admin/Dashboard.tsx"),
+            Some("src".to_string())
+        );
     }
 }

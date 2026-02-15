@@ -183,9 +183,9 @@ mod tests {
     fn test_individual_param_discovery() {
         let discovery = ParamDiscovery::new(FuzzStrategy::Individual);
         let base_url = Url::parse("https://api.example.com/users").unwrap();
-        
+
         let urls = discovery.generate_param_urls(&base_url);
-        
+
         assert!(!urls.is_empty(), "Should generate parameter URLs");
         assert!(
             urls.iter().any(|u| u.query().is_some()),
@@ -197,9 +197,9 @@ mod tests {
     fn test_combined_param_discovery() {
         let discovery = ParamDiscovery::new(FuzzStrategy::Combinations);
         let base_url = Url::parse("https://api.example.com/users").unwrap();
-        
+
         let urls = discovery.generate_param_urls(&base_url);
-        
+
         assert!(!urls.is_empty(), "Should generate combined parameter URLs");
     }
 
@@ -207,7 +207,7 @@ mod tests {
     fn test_param_fuzzer_id() {
         let fuzzer = ParamFuzzer::new();
         let values = fuzzer.get_test_values("id");
-        
+
         assert!(!values.is_empty(), "Should have test values for 'id'");
         assert!(values.contains(&"1".to_string()), "Should include '1'");
     }
@@ -216,19 +216,25 @@ mod tests {
     fn test_param_fuzzer_debug() {
         let fuzzer = ParamFuzzer::new();
         let values = fuzzer.get_test_values("debug");
-        
+
         assert!(!values.is_empty(), "Should have test values for 'debug'");
-        assert!(values.contains(&"true".to_string()), "Should include 'true'");
-        assert!(values.contains(&"false".to_string()), "Should include 'false'");
+        assert!(
+            values.contains(&"true".to_string()),
+            "Should include 'true'"
+        );
+        assert!(
+            values.contains(&"false".to_string()),
+            "Should include 'false'"
+        );
     }
 
     #[test]
     fn test_fuzz_param_generates_urls() {
         let fuzzer = ParamFuzzer::new();
         let base_url = Url::parse("https://api.example.com/user").unwrap();
-        
+
         let urls = fuzzer.fuzz_param(&base_url, "id");
-        
+
         assert!(!urls.is_empty(), "Should generate URLs");
         assert!(
             urls.iter().all(|u| u.query().is_some()),

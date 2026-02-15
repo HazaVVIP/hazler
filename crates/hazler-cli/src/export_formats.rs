@@ -15,7 +15,7 @@ pub fn format_openapi(result: &CrawlResult) -> String {
         let method = "get"; // Default to GET, could be enhanced to detect method
 
         let path_item = paths.entry(path.clone()).or_insert_with(|| json!({}));
-        
+
         let operation = json!({
             "summary": format!("Discovered endpoint at {}", page.url),
             "responses": {
@@ -39,13 +39,17 @@ pub fn format_openapi(result: &CrawlResult) -> String {
     }
 
     // Get base URL from first page
-    let base_url = result.pages.first().map(|p| {
-        format!(
-            "{}://{}",
-            p.url.scheme(),
-            p.url.host_str().unwrap_or("localhost")
-        )
-    }).unwrap_or_else(|| "http://localhost".to_string());
+    let base_url = result
+        .pages
+        .first()
+        .map(|p| {
+            format!(
+                "{}://{}",
+                p.url.scheme(),
+                p.url.host_str().unwrap_or("localhost")
+            )
+        })
+        .unwrap_or_else(|| "http://localhost".to_string());
 
     let spec = json!({
         "openapi": "3.0.0",
@@ -100,7 +104,7 @@ pub fn format_postman(result: &CrawlResult) -> String {
                         }).collect::<Vec<_>>()
                     }).unwrap_or_default()
                 },
-                "description": format!("Status: {}, Depth: {}, Links: {}", 
+                "description": format!("Status: {}, Depth: {}, Links: {}",
                     page.status_code, page.depth, page.links.len())
             },
             "response": []

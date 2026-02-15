@@ -7,25 +7,25 @@ use serde::{Deserialize, Serialize};
 pub struct FuzzerConfig {
     /// Enable pluralization mutations
     pub enable_pluralization: bool,
-    
+
     /// Enable file extension mutations
     pub enable_extensions: bool,
-    
+
     /// Enable API versioning mutations
     pub enable_versioning: bool,
-    
+
     /// Enable parameter discovery
     pub enable_param_discovery: bool,
-    
+
     /// Enable BOLA/IDOR detection
     pub enable_bola_detection: bool,
-    
+
     /// API versions to test (e.g., ["v1", "v2", "v3"])
     pub api_versions: Vec<String>,
-    
+
     /// File extensions to test
     pub file_extensions: Vec<String>,
-    
+
     /// Maximum mutations per URL
     pub max_mutations: usize,
 }
@@ -64,7 +64,7 @@ impl FuzzerConfig {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Create an aggressive configuration with more mutations
     pub fn aggressive() -> Self {
         Self {
@@ -96,7 +96,7 @@ impl FuzzerConfig {
             max_mutations: 200,
         }
     }
-    
+
     /// Create a minimal configuration for targeted fuzzing
     pub fn minimal() -> Self {
         Self {

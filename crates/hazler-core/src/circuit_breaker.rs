@@ -1,6 +1,5 @@
 /// Circuit breaker pattern for preventing cascading failures
 /// Tracks failure rates and opens circuit when threshold is exceeded
-
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::{debug, warn};
@@ -156,8 +155,10 @@ impl CircuitBreaker {
                 state.success_count += 1;
                 if state.success_count >= self.config.success_threshold {
                     // Close the circuit
-                    debug!("Circuit breaker '{}' closing after {} successes", 
-                        self.name, state.success_count);
+                    debug!(
+                        "Circuit breaker '{}' closing after {} successes",
+                        self.name, state.success_count
+                    );
                     state.state = CircuitState::Closed;
                     state.failure_count = 0;
                     state.success_count = 0;

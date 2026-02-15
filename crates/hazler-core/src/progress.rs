@@ -1,6 +1,5 @@
 /// Progress tracking and reporting for crawl operations
 /// Provides real-time feedback on crawling progress
-
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::info;

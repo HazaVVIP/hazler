@@ -4,12 +4,12 @@
 //! Baselines are stored in JSON format and can be used to detect changes
 //! in web application responses over time.
 
+use crate::differ::noise_filter::NormalizedResponse;
+use crate::differ::simhash::SimHash;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
-use crate::differ::simhash::SimHash;
-use crate::differ::noise_filter::NormalizedResponse;
 
 /// A stored baseline entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,12 +49,15 @@ impl BaselineStorage {
             .unwrap()
             .as_secs();
 
-        self.entries.insert(url.clone(), BaselineEntry {
-            url,
-            hash,
-            normalized,
-            timestamp,
-        });
+        self.entries.insert(
+            url.clone(),
+            BaselineEntry {
+                url,
+                hash,
+                normalized,
+                timestamp,
+            },
+        );
     }
 
     /// Get a baseline entry by URL
@@ -123,12 +126,12 @@ impl BaselineManager {
     /// Save baseline to file
     pub fn save(&self) -> anyhow::Result<()> {
         let content = serde_json::to_string_pretty(&self.storage)?;
-        
+
         // Create parent directory if it doesn't exist
         if let Some(parent) = Path::new(&self.file_path).parent() {
             fs::create_dir_all(parent)?;
         }
-        
+
         fs::write(&self.file_path, content)?;
         Ok(())
     }
@@ -248,8 +251,12 @@ mod tests {
     #[test]
     fn test_baseline_manager_save_load() {
         let dir = tempdir().unwrap();
-        let file_path = dir.path().join("baseline.json").to_string_lossy().to_string();
-        
+        let file_path = dir
+            .path()
+            .join("baseline.json")
+            .to_string_lossy()
+            .to_string();
+
         // Save baseline
         {
             let mut manager = BaselineManager::new(file_path.clone());
@@ -258,15 +265,17 @@ mod tests {
                 content: "test content".to_string(),
                 removed_patterns: vec!["timestamp".to_string()],
             };
-            
-            manager.save_baseline("https://example.com", hash, normalized).unwrap();
+
+            manager
+                .save_baseline("https://example.com", hash, normalized)
+                .unwrap();
         }
 
         // Load baseline
         {
             let mut manager = BaselineManager::new(file_path.clone());
             manager.load().unwrap();
-            
+
             let entry = manager.load_baseline("https://example.com").unwrap();
             assert!(entry.is_some());
             assert_eq!(entry.unwrap().url, "https://example.com");
@@ -283,16 +292,22 @@ mod tests {
     #[test]
     fn test_baseline_manager_get_urls() {
         let dir = tempdir().unwrap();
-        let file_path = dir.path().join("baseline.json").to_string_lossy().to_string();
+        let file_path = dir
+            .path()
+            .join("baseline.json")
+            .to_string_lossy()
+            .to_string();
         let mut manager = BaselineManager::new(file_path);
-        
+
         let hash = SimHash::new(12345);
         let normalized = NormalizedResponse {
             content: "test".to_string(),
             removed_patterns: Vec::new(),
         };
 
-        manager.save_baseline("url1", hash, normalized.clone()).unwrap();
+        manager
+            .save_baseline("url1", hash, normalized.clone())
+            .unwrap();
         manager.save_baseline("url2", hash, normalized).unwrap();
 
         let urls = manager.get_urls();

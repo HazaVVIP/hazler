@@ -18,18 +18,13 @@ fn bench_url_normalization(c: &mut Criterion) {
     for (i, url_str) in test_urls.iter().enumerate() {
         let url = Url::parse(url_str).unwrap();
         group.bench_function(format!("normalize_url_{}", i), |b| {
-            b.iter(|| {
-                normalizer.normalize(black_box(&url))
-            });
+            b.iter(|| normalizer.normalize(black_box(&url)));
         });
     }
 
     group.bench_function("normalize_batch", |b| {
-        let urls: Vec<Url> = test_urls
-            .iter()
-            .map(|s| Url::parse(s).unwrap())
-            .collect();
-        
+        let urls: Vec<Url> = test_urls.iter().map(|s| Url::parse(s).unwrap()).collect();
+
         b.iter(|| {
             for url in &urls {
                 normalizer.normalize(black_box(url));

@@ -1,6 +1,5 @@
 /// Graceful shutdown handler for Ctrl+C and signal handling
 /// Ensures state is saved and resources are cleaned up
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::signal;

@@ -86,6 +86,7 @@
 pub mod config;
 pub mod crawler;
 pub mod delay;
+pub mod differ;
 pub mod noise_filter;
 pub mod normalizer;
 pub mod queue;
@@ -95,6 +96,11 @@ pub mod types;
 pub use config::Config;
 pub use crawler::Crawler;
 pub use delay::DelayConfig;
+pub use differ::{
+    BaselineManager, BaselineStorage, ChangeDetector, ChangeType, ClusteringAlgorithm,
+    DBSCANClusterer, DifferConfig, KMeansClusterer, NormalizedResponse, ResponseChange,
+    ResponseCluster, ResponseDiffer, ResponseNormalizer, SimHash, SimHashCalculator,
+};
 pub use noise_filter::{NoiseFilter, NoiseFilterStats, ResponsePattern};
 pub use normalizer::AdvancedUrlNormalizer;
 pub use queue::UrlQueue;

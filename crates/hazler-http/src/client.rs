@@ -118,13 +118,8 @@ impl HttpClient {
                         debug!("Applied API key in header: {}", name);
                     }
                     ApiKeyLocation::Query => {
-                        // Modify URL to add query parameter
-                        let mut url_with_key = url.clone();
-                        url_with_key
-                            .query_pairs_mut()
-                            .append_pair(name, key);
-                        request = self.client.get(url_with_key.as_str());
-                        debug!("Applied API key in query parameter: {}", name);
+                        // Query parameter handling is done before request creation in fetch()
+                        // to avoid losing already-set headers
                     }
                     ApiKeyLocation::Cookie => {
                         let cookie_str = format!("{}={}", name, key);
@@ -199,8 +194,25 @@ impl HttpClient {
     pub async fn fetch(&self, url: &Url) -> Result<HttpResponse> {
         debug!("Fetching URL: {}", url);
 
+        // Pre-process URL for API key in query parameter if needed
+        let mut final_url = url.clone();
+        let mut skip_api_key_in_auth = false;
+        
+        if let Some(auth_config) = &self.auth_config {
+            if let AuthMethod::ApiKey {
+                key,
+                location: ApiKeyLocation::Query,
+                name,
+            } = &auth_config.method
+            {
+                final_url.query_pairs_mut().append_pair(name, key);
+                skip_api_key_in_auth = true;
+                debug!("Applied API key in query parameter: {}", name);
+            }
+        }
+
         // Build request with optional User-Agent rotation and Chrome hints
-        let mut request = self.client.get(url.as_str());
+        let mut request = self.client.get(final_url.as_str());
         
         // Apply User-Agent rotation if enabled
         if self.rotate_user_agent {
@@ -219,9 +231,11 @@ impl HttpClient {
             }
         }
         
-        // Apply authentication if configured
+        // Apply authentication if configured (skip query-based API key as already handled)
         if let Some(auth_config) = &self.auth_config {
-            request = self.apply_auth(request, url, &auth_config.method)?;
+            if !skip_api_key_in_auth {
+                request = self.apply_auth(request, url, &auth_config.method)?;
+            }
         }
         
         let response = request.send().await.map_err(|e| {

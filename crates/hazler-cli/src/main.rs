@@ -557,7 +557,7 @@ async fn main() {
         .max_depth(max_depth)
         .concurrency(args.concurrency)
         .max_pages(max_pages)
-        .user_agent(args.user_agent.clone())
+        .user_agent(args.user_agent.clone()) // Clone needed because args was borrowed earlier for auth config
         .timeout_secs(args.timeout)
         .aggressive(aggressive);
 

@@ -8,6 +8,8 @@ A fast, efficient, and human-friendly web crawler built in Rust with built-in se
 - ✅ **Stealth Mode** - WAF evasion enabled by default for better success rates
 - ✅ **Secret Scanning** - Automatic detection of API keys, tokens, and credentials (enabled by default)
 - ✅ **Headless Browser Support** - Crawl modern SPAs (React, Vue, Angular) with JavaScript execution
+- ✅ **GraphQL Intelligence** - Automatic detection and schema extraction from GraphQL endpoints
+- ✅ **Source Map Parser** - Reveals original source code structure from source maps, exposing admin panels and sensitive paths
 - ✅ HTTP-only crawling with concurrent request handling
 - ✅ HTML parsing and link extraction
 - ✅ **JavaScript endpoint discovery** with regex-based extraction
@@ -408,6 +410,36 @@ Faster browser crawling (disable images):
 ```bash
 hazler https://app.com --browser --disable-images
 ```
+
+**GraphQL Intelligence:**
+
+Automatically detect and analyze GraphQL endpoints:
+```bash
+# Auto-detect GraphQL endpoints during crawling
+hazler https://api.example.com
+
+# Enable introspection queries for schema extraction
+hazler https://api.example.com --graphql-introspect
+```
+
+**Source Map Analysis:**
+
+Automatically parse source maps to reveal original source structure (enabled by default):
+```bash
+# Source map parsing enabled by default
+hazler https://app.com
+
+# Disable source map parsing if not needed
+hazler https://app.com --no-source-maps
+```
+
+Source map analysis reveals:
+- Original file paths and project structure
+- Admin panel routes and internal components
+- API endpoint definitions
+- Authentication logic paths
+- Configuration files
+- Framework detection
 
 ## Security Reconnaissance Features
 

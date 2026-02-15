@@ -7,6 +7,9 @@ pub enum Error {
 
     #[error("Invalid URL: {0}")]
     InvalidUrl(#[from] url::ParseError),
+
+    #[error("JSON parse error: {0}")]
+    JsonError(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

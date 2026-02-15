@@ -17,7 +17,7 @@ use html_report::generate_html_report;
 #[command(version = "0.1.0")]
 #[command(about = "Next-Generation Intelligent Web Crawler", long_about = None)]
 struct Args {
-    /// Target URL to crawl
+    /// Target URL to crawl (use '-' to read URLs from stdin for pipeline mode)
     #[arg(value_name = "URL")]
     url: String,
 
@@ -41,7 +41,7 @@ struct Args {
     #[arg(short = 't', long, default_value = "10")]
     timeout: u64,
 
-    /// Output format (json, jsonl, urls, csv, or tree)
+    /// Output format (json, jsonl, urls, csv, tree, nuclei, ffuf, or burp)
     #[arg(short = 'o', long, default_value = "tree")]
     output_format: String,
 
@@ -157,12 +157,48 @@ async fn main() {
         .with_target(false)
         .init();
 
-    // Parse the URL
-    let start_url = match Url::parse(&args.url) {
-        Ok(url) => url,
-        Err(e) => {
-            error!("Invalid URL '{}': {}", args.url, e);
+    // Parse the URL(s) - support pipeline mode with stdin
+    let urls: Vec<Url> = if args.url == "-" {
+        // Pipeline mode: read URLs from stdin
+        use std::io::{self, BufRead};
+        let stdin = io::stdin();
+        let mut urls = Vec::new();
+        
+        for line in stdin.lock().lines() {
+            match line {
+                Ok(url_str) => {
+                    let url_str = url_str.trim();
+                    if url_str.is_empty() || url_str.starts_with('#') {
+                        continue; // Skip empty lines and comments
+                    }
+                    match Url::parse(url_str) {
+                        Ok(url) => urls.push(url),
+                        Err(e) => {
+                            eprintln!("Warning: Skipping invalid URL '{}': {}", url_str, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Error reading from stdin: {}", e);
+                    process::exit(1);
+                }
+            }
+        }
+        
+        if urls.is_empty() {
+            error!("No valid URLs provided via stdin");
             process::exit(1);
+        }
+        
+        urls
+    } else {
+        // Normal mode: single URL from command line
+        match Url::parse(&args.url) {
+            Ok(url) => vec![url],
+            Err(e) => {
+                error!("Invalid URL '{}': {}", args.url, e);
+                process::exit(1);
+            }
         }
     };
 
@@ -258,37 +294,81 @@ async fn main() {
         }
     }
 
-    match crawler.crawl(start_url).await {
-        Ok(result) => {
-            // Generate HTML report if requested
-            if let Some(html_report_path) = &args.html_report {
-                match generate_html_report(&result, std::path::Path::new(html_report_path)) {
-                    Ok(_) => {
-                        eprintln!(
-                            "{} HTML report generated: {}",
-                            "✓".green().bold(),
-                            html_report_path.bright_cyan()
-                        );
-                    }
-                    Err(e) => {
-                        error!("Failed to generate HTML report: {}", e);
+    // Crawl all URLs (supports pipeline mode with multiple URLs)
+    use hazler_core::CrawlResult;
+    let mut combined_result = CrawlResult {
+        pages: Vec::new(),
+        total_pages: 0,
+        total_urls: 0,
+        errors: Vec::new(),
+        secret_findings: None,
+    };
+
+    for (idx, start_url) in urls.iter().enumerate() {
+        if urls.len() > 1 {
+            info!("Crawling URL {}/{}: {}", idx + 1, urls.len(), start_url);
+        }
+        
+        match crawler.crawl(start_url.clone()).await {
+            Ok(result) => {
+                // Merge results into combined result
+                combined_result.pages.extend(result.pages);
+                combined_result.total_pages += result.total_pages;
+                combined_result.total_urls += result.total_urls;
+                combined_result.errors.extend(result.errors);
+                
+                // Merge secret findings
+                if let Some(ref findings) = result.secret_findings {
+                    if let Some(ref mut combined_findings) = combined_result.secret_findings {
+                        combined_findings.total += findings.total;
+                        combined_findings.critical += findings.critical;
+                        combined_findings.high += findings.high;
+                        combined_findings.medium += findings.medium;
+                        combined_findings.low += findings.low;
+                    } else {
+                        combined_result.secret_findings = Some(findings.clone());
                     }
                 }
             }
-
-            // Generate report if requested (to stderr, doesn't interfere with output)
-            if args.report {
-                eprintln!("{}", generate_report(&result));
-            } else if args.stats {
-                eprintln!("{}", generate_stats(&result));
+            Err(e) => {
+                error!("Failed to crawl {}: {}", start_url, e);
+                combined_result.errors.push(format!("{}: {}", start_url, e));
             }
+        }
+    }
 
-            // Create output formatter (exclude_body is true by default, unless --include-body is specified)
-            let exclude_body = !args.include_body;
-            let formatter = OutputFormatter::new(exclude_body, args.fields);
+    // Process the combined results
+    let result = combined_result;
 
-            // Output results based on format
-            match args.output_format.as_str() {
+    // Generate HTML report if requested
+    if let Some(html_report_path) = &args.html_report {
+        match generate_html_report(&result, std::path::Path::new(html_report_path)) {
+            Ok(_) => {
+                eprintln!(
+                    "{} HTML report generated: {}",
+                    "✓".green().bold(),
+                    html_report_path.bright_cyan()
+                );
+            }
+            Err(e) => {
+                error!("Failed to generate HTML report: {}", e);
+            }
+        }
+    }
+
+    // Generate report if requested (to stderr, doesn't interfere with output)
+    if args.report {
+        eprintln!("{}", generate_report(&result));
+    } else if args.stats {
+        eprintln!("{}", generate_stats(&result));
+    }
+
+    // Create output formatter (exclude_body is true by default, unless --include-body is specified)
+    let exclude_body = !args.include_body;
+    let formatter = OutputFormatter::new(exclude_body, args.fields);
+
+    // Output results based on format
+    match args.output_format.as_str() {
                 "json" => match formatter.format_json(&result) {
                     Ok(json) => println!("{}", json),
                     Err(e) => {
@@ -316,9 +396,34 @@ async fn main() {
                 "tree" => {
                     println!("{}", formatter.format_tree(&result));
                 }
+                "nuclei" => match formatter.format_nuclei(&result) {
+                    Ok(lines) => {
+                        for line in lines {
+                            println!("{}", line);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to serialize Nuclei results: {}", e);
+                        process::exit(1);
+                    }
+                },
+                "ffuf" => match formatter.format_ffuf(&result) {
+                    Ok(lines) => {
+                        for line in lines {
+                            println!("{}", line);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to serialize ffuf results: {}", e);
+                        process::exit(1);
+                    }
+                },
+                "burp" => {
+                    println!("{}", formatter.format_burp(&result));
+                }
                 _ => {
                     error!(
-                        "Unknown output format: {}. Valid formats: json, jsonl, urls, csv, tree",
+                        "Unknown output format: {}. Valid formats: json, jsonl, urls, csv, tree, nuclei, ffuf, burp",
                         args.output_format
                     );
                     process::exit(1);
@@ -382,10 +487,4 @@ async fn main() {
 
                 eprintln!("{}\n", "═".repeat(80).bright_blue());
             }
-        }
-        Err(e) => {
-            error!("Crawl failed: {}", e);
-            process::exit(1);
-        }
     }
-}

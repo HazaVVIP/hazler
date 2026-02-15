@@ -72,6 +72,7 @@ impl SimHashCalculator {
             let hash = self.hash_feature(&feature);
 
             // Update accumulator based on hash bits
+            #[allow(clippy::needless_range_loop)]
             for i in 0..64 {
                 let bit = (hash >> i) & 1;
                 if bit == 1 {
@@ -84,6 +85,7 @@ impl SimHashCalculator {
 
         // Generate final hash
         let mut simhash: u64 = 0;
+        #[allow(clippy::needless_range_loop)]
         for i in 0..64 {
             if v[i] > 0 {
                 simhash |= 1u64 << i;

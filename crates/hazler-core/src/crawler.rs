@@ -33,6 +33,7 @@ struct CrawlPageContext {
     secret_scanner: Option<SecretScanner>,
     noise_filter: Arc<Mutex<NoiseFilter>>,
     delay_config: Option<DelayConfig>,
+    #[allow(dead_code)]
     graphql_introspect: bool,
     parse_source_maps: bool,
     #[cfg(feature = "browser")]

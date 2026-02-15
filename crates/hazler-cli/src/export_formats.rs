@@ -98,7 +98,7 @@ pub fn format_postman(result: &CrawlResult) -> String {
                         q.split('&').map(|pair| {
                             let parts: Vec<_> = pair.split('=').collect();
                             json!({
-                                "key": parts.get(0).unwrap_or(&""),
+                                "key": parts.first().unwrap_or(&""),
                                 "value": parts.get(1).unwrap_or(&"")
                             })
                         }).collect::<Vec<_>>()

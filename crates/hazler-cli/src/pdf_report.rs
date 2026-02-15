@@ -27,7 +27,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     // Metadata
     let mut y_pos = 260.0;
     current_layer.use_text(
-        &format!("Generated: {}", timestamp),
+        format!("Generated: {}", timestamp),
         12.0,
         Mm(20.0),
         Mm(y_pos),
@@ -41,7 +41,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     y_pos -= 10.0;
 
     current_layer.use_text(
-        &format!("Total Pages Crawled: {}", result.total_pages),
+        format!("Total Pages Crawled: {}", result.total_pages),
         12.0,
         Mm(20.0),
         Mm(y_pos),
@@ -50,7 +50,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     y_pos -= 8.0;
 
     current_layer.use_text(
-        &format!("Total URLs Discovered: {}", result.total_urls),
+        format!("Total URLs Discovered: {}", result.total_urls),
         12.0,
         Mm(20.0),
         Mm(y_pos),
@@ -59,7 +59,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     y_pos -= 8.0;
 
     current_layer.use_text(
-        &format!("Errors Encountered: {}", result.errors.len()),
+        format!("Errors Encountered: {}", result.errors.len()),
         12.0,
         Mm(20.0),
         Mm(y_pos),
@@ -90,7 +90,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
         }
 
         current_layer.use_text(
-            &format!("Total Secrets: {}", total_secrets),
+            format!("Total Secrets: {}", total_secrets),
             12.0,
             Mm(20.0),
             Mm(y_pos),
@@ -100,7 +100,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
 
         if critical_secrets > 0 {
             current_layer.use_text(
-                &format!("Critical: {}", critical_secrets),
+                format!("Critical: {}", critical_secrets),
                 12.0,
                 Mm(30.0),
                 Mm(y_pos),
@@ -111,7 +111,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
 
         if high_secrets > 0 {
             current_layer.use_text(
-                &format!("High: {}", high_secrets),
+                format!("High: {}", high_secrets),
                 12.0,
                 Mm(30.0),
                 Mm(y_pos),
@@ -122,7 +122,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
 
         if medium_secrets > 0 {
             current_layer.use_text(
-                &format!("Medium: {}", medium_secrets),
+                format!("Medium: {}", medium_secrets),
                 12.0,
                 Mm(30.0),
                 Mm(y_pos),
@@ -133,7 +133,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
 
         if low_secrets > 0 {
             current_layer.use_text(
-                &format!("Low: {}", low_secrets),
+                format!("Low: {}", low_secrets),
                 12.0,
                 Mm(30.0),
                 Mm(y_pos),
@@ -170,7 +170,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
         }
 
         current_layer.use_text(
-            &format!("Status {}: {} pages", code, count),
+            format!("Status {}: {} pages", code, count),
             12.0,
             Mm(30.0),
             Mm(y_pos),
@@ -212,7 +212,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
         };
 
         current_layer.use_text(
-            &format!("{}. [{}] {}", i + 1, page.status_code, display_url),
+            format!("{}. [{}] {}", i + 1, page.status_code, display_url),
             10.0,
             Mm(25.0),
             Mm(y_pos),

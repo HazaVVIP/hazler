@@ -342,7 +342,7 @@ impl OutputFormatter {
             // Determine extension from path
             let extension = path
                 .split('/')
-                .last()
+                .next_back()
                 .and_then(|f| f.rsplit_once('.'))
                 .map(|(_, ext)| ext)
                 .unwrap_or("null");
@@ -358,17 +358,17 @@ impl OutputFormatter {
             let mimetype = page
                 .content_type
                 .as_deref()
-                .and_then(|ct| {
+                .map(|ct| {
                     if ct.contains("html") {
-                        Some("HTML")
+                        "HTML"
                     } else if ct.contains("json") {
-                        Some("JSON")
+                        "JSON"
                     } else if ct.contains("xml") {
-                        Some("XML")
+                        "XML"
                     } else if ct.contains("javascript") {
-                        Some("script")
+                        "script"
                     } else {
-                        Some("other")
+                        "other"
                     }
                 })
                 .unwrap_or("other");
@@ -385,7 +385,7 @@ impl OutputFormatter {
             xml.push_str(&format!("    <host>{}</host>\n", Self::escape_xml(host)));
             xml.push_str(&format!("    <port>{}</port>\n", port));
             xml.push_str(&format!("    <protocol>{}</protocol>\n", protocol));
-            xml.push_str(&format!("    <method>GET</method>\n"));
+            xml.push_str("    <method>GET</method>\n");
             xml.push_str(&format!("    <path>{}</path>\n", Self::escape_xml(path)));
             xml.push_str(&format!("    <extension>{}</extension>\n", extension));
             xml.push_str(&format!(

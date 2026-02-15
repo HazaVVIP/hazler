@@ -499,7 +499,7 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
         }
         Ok(Some(config))
     } else if form_auth.is_some() {
-        return Err("Form auth URL specified but no authentication method provided".to_string());
+        Err("Form auth URL specified but no authentication method provided".to_string())
     } else {
         Ok(None)
     }

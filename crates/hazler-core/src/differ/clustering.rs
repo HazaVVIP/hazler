@@ -82,6 +82,7 @@ impl KMeansClusterer {
             }
 
             // Update step: recompute centroids
+            #[allow(clippy::needless_range_loop)]
             for c in 0..k {
                 let cluster_hashes: Vec<SimHash> = responses
                     .iter()
@@ -98,6 +99,7 @@ impl KMeansClusterer {
 
         // Build cluster results
         let mut clusters = Vec::new();
+        #[allow(clippy::needless_range_loop)]
         for c in 0..k {
             let cluster_items: Vec<(String, SimHash)> = responses
                 .iter()
@@ -133,6 +135,7 @@ impl KMeansClusterer {
         let mut bit_counts = [0i32; 64];
 
         for hash in hashes {
+            #[allow(clippy::needless_range_loop)]
             for i in 0..64 {
                 if (hash.0 >> i) & 1 == 1 {
                     bit_counts[i] += 1;
@@ -144,6 +147,7 @@ impl KMeansClusterer {
 
         let mut centroid = 0u64;
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..64 {
             if bit_counts[i] > 0 {
                 centroid |= 1u64 << i;

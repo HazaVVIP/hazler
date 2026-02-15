@@ -803,6 +803,7 @@ dependencies = [
  "clap",
  "colored",
  "hazler-core",
+ "hazler-fuzzer",
  "hazler-http",
  "hazler-parser",
  "indicatif",

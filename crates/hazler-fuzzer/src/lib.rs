@@ -49,5 +49,5 @@ pub mod wordlists;
 pub use config::FuzzerConfig;
 pub use detector::{BolaDetector, ResponseComparison};
 pub use mutator::{Mutation, MutationType, UrlMutator};
-pub use params::{ParamDiscovery, ParamFuzzer};
+pub use params::{FuzzStrategy, ParamDiscovery, ParamFuzzer};
 pub use wordlists::{Wordlists, COMMON_ENDPOINTS, COMMON_PARAMS, FILE_EXTENSIONS};

@@ -14,6 +14,17 @@ use output::{generate_report, generate_stats, OutputFormatter};
 mod html_report;
 use html_report::generate_html_report;
 
+mod pdf_report;
+use pdf_report::generate_pdf_report;
+
+mod sqlite_export;
+use sqlite_export::export_to_sqlite;
+
+mod webhook;
+
+mod export_formats;
+use export_formats::{format_openapi, format_postman};
+
 mod fuzzer_integration;
 use fuzzer_integration::apply_fuzzing;
 
@@ -47,7 +58,7 @@ struct Args {
     #[arg(short = 't', long, default_value = "10")]
     timeout: u64,
 
-    /// Output format (json, jsonl, urls, csv, tree, nuclei, ffuf, or burp)
+    /// Output format (json, jsonl, urls, csv, tree, nuclei, ffuf, burp, openapi, or postman)
     #[arg(short = 'o', long, default_value = "tree")]
     output_format: String,
 
@@ -72,6 +83,42 @@ struct Args {
     /// Example: --html-report report.html
     #[arg(long, value_name = "FILE")]
     html_report: Option<String>,
+
+    /// Generate PDF report and save to file
+    /// Creates a PDF report with summary statistics
+    /// Example: --pdf-report report.pdf
+    #[arg(long, value_name = "FILE")]
+    pdf_report: Option<String>,
+
+    /// Export results to SQLite database
+    /// Example: --export-sqlite crawl.db
+    #[arg(long, value_name = "FILE")]
+    export_sqlite: Option<String>,
+
+    /// Export as OpenAPI/Swagger specification
+    /// Example: --export-openapi swagger.json
+    #[arg(long, value_name = "FILE")]
+    export_openapi: Option<String>,
+
+    /// Export as Postman collection
+    /// Example: --export-postman collection.json
+    #[arg(long, value_name = "FILE")]
+    export_postman: Option<String>,
+
+    /// Send results to Slack webhook
+    /// Example: --webhook-slack https://hooks.slack.com/services/...
+    #[arg(long, value_name = "URL")]
+    webhook_slack: Option<String>,
+
+    /// Send results to Discord webhook
+    /// Example: --webhook-discord https://discord.com/api/webhooks/...
+    #[arg(long, value_name = "URL")]
+    webhook_discord: Option<String>,
+
+    /// Send results to generic webhook (JSON payload)
+    /// Example: --webhook-url https://example.com/webhook
+    #[arg(long, value_name = "URL")]
+    webhook_url: Option<String>,
 
     /// Verbose output
     #[arg(short = 'v', long)]
@@ -848,6 +895,108 @@ async fn main() {
         }
     }
 
+    // Generate PDF report if requested
+    if let Some(pdf_report_path) = &args.pdf_report {
+        match generate_pdf_report(&result, std::path::Path::new(pdf_report_path)) {
+            Ok(_) => {
+                eprintln!(
+                    "{} PDF report generated: {}",
+                    "✓".green().bold(),
+                    pdf_report_path.bright_cyan()
+                );
+            }
+            Err(e) => {
+                error!("Failed to generate PDF report: {}", e);
+            }
+        }
+    }
+
+    // Export to SQLite if requested
+    if let Some(sqlite_path) = &args.export_sqlite {
+        match export_to_sqlite(&result, std::path::Path::new(sqlite_path)) {
+            Ok(_) => {
+                eprintln!(
+                    "{} SQLite database exported: {}",
+                    "✓".green().bold(),
+                    sqlite_path.bright_cyan()
+                );
+            }
+            Err(e) => {
+                error!("Failed to export to SQLite: {}", e);
+            }
+        }
+    }
+
+    // Export to OpenAPI if requested
+    if let Some(openapi_path) = &args.export_openapi {
+        let openapi_spec = format_openapi(&result);
+        match fs::write(openapi_path, openapi_spec) {
+            Ok(_) => {
+                eprintln!(
+                    "{} OpenAPI spec exported: {}",
+                    "✓".green().bold(),
+                    openapi_path.bright_cyan()
+                );
+            }
+            Err(e) => {
+                error!("Failed to export OpenAPI spec: {}", e);
+            }
+        }
+    }
+
+    // Export to Postman if requested
+    if let Some(postman_path) = &args.export_postman {
+        let postman_collection = format_postman(&result);
+        match fs::write(postman_path, postman_collection) {
+            Ok(_) => {
+                eprintln!(
+                    "{} Postman collection exported: {}",
+                    "✓".green().bold(),
+                    postman_path.bright_cyan()
+                );
+            }
+            Err(e) => {
+                error!("Failed to export Postman collection: {}", e);
+            }
+        }
+    }
+
+    // Send to Slack webhook if requested
+    if let Some(slack_url) = &args.webhook_slack {
+        match webhook::send_to_slack(&result, slack_url).await {
+            Ok(_) => {
+                eprintln!("{} Results sent to Slack", "✓".green().bold());
+            }
+            Err(e) => {
+                error!("Failed to send to Slack: {}", e);
+            }
+        }
+    }
+
+    // Send to Discord webhook if requested
+    if let Some(discord_url) = &args.webhook_discord {
+        match webhook::send_to_discord(&result, discord_url).await {
+            Ok(_) => {
+                eprintln!("{} Results sent to Discord", "✓".green().bold());
+            }
+            Err(e) => {
+                error!("Failed to send to Discord: {}", e);
+            }
+        }
+    }
+
+    // Send to generic webhook if requested
+    if let Some(webhook_url) = &args.webhook_url {
+        match webhook::send_to_webhook(&result, webhook_url).await {
+            Ok(_) => {
+                eprintln!("{} Results sent to webhook", "✓".green().bold());
+            }
+            Err(e) => {
+                error!("Failed to send to webhook: {}", e);
+            }
+        }
+    }
+
     // Generate report if requested (to stderr, doesn't interfere with output)
     if args.report {
         eprintln!("{}", generate_report(&result));
@@ -913,9 +1062,15 @@ async fn main() {
                 "burp" => {
                     println!("{}", formatter.format_burp(&result));
                 }
+                "openapi" => {
+                    println!("{}", format_openapi(&result));
+                }
+                "postman" => {
+                    println!("{}", format_postman(&result));
+                }
                 _ => {
                     error!(
-                        "Unknown output format: {}. Valid formats: json, jsonl, urls, csv, tree, nuclei, ffuf, burp",
+                        "Unknown output format: {}. Valid formats: json, jsonl, urls, csv, tree, nuclei, ffuf, burp, openapi, postman",
                         args.output_format
                     );
                     process::exit(1);

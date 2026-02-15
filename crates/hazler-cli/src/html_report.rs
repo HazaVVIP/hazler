@@ -43,6 +43,37 @@ fn build_html_report(result: &CrawlResult) -> String {
         }
     }
 
+    // Calculate status code distribution for charts
+    let mut status_groups: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for page in &result.pages {
+        let group = match page.status_code {
+            200..=299 => "2xx Success",
+            300..=399 => "3xx Redirect",
+            400..=499 => "4xx Client Error",
+            500..=599 => "5xx Server Error",
+            _ => "Other",
+        };
+        *status_groups.entry(group).or_insert(0) += 1;
+    }
+    
+    let status_labels: Vec<_> = status_groups.keys().collect();
+    let status_values: Vec<_> = status_labels.iter().map(|k| status_groups[*k]).collect();
+    let status_labels_json = serde_json::to_string(&status_labels).unwrap_or_else(|_| "[]".to_string());
+    let status_values_json = serde_json::to_string(&status_values).unwrap_or_else(|_| "[]".to_string());
+    
+    // Calculate depth distribution for charts
+    let mut depth_map: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    for page in &result.pages {
+        *depth_map.entry(page.depth).or_insert(0) += 1;
+    }
+    
+    let mut depth_list: Vec<_> = depth_map.iter().collect();
+    depth_list.sort_by_key(|(depth, _)| *depth);
+    let depth_labels: Vec<_> = depth_list.iter().map(|(d, _)| format!("Depth {}", d)).collect();
+    let depth_values: Vec<_> = depth_list.iter().map(|(_, count)| *count).collect();
+    let depth_labels_json = serde_json::to_string(&depth_labels).unwrap_or_else(|_| "[]".to_string());
+    let depth_values_json = serde_json::to_string(&depth_values).unwrap_or_else(|_| "[]".to_string());
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -50,6 +81,7 @@ fn build_html_report(result: &CrawlResult) -> String {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hazler Crawl Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {{
             margin: 0;
@@ -261,6 +293,110 @@ fn build_html_report(result: &CrawlResult) -> String {
             color: #7f8c8d;
             font-size: 0.9em;
         }}
+
+        /* Tab styles */
+        .tabs {{
+            display: flex;
+            border-bottom: 2px solid #3498db;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }}
+
+        .tab {{
+            padding: 12px 24px;
+            cursor: pointer;
+            background: #ecf0f1;
+            border: none;
+            font-size: 1em;
+            font-weight: 500;
+            transition: all 0.3s;
+            margin-right: 5px;
+            margin-bottom: -2px;
+        }}
+
+        .tab:hover {{
+            background: #d5dbdb;
+        }}
+
+        .tab.active {{
+            background: #3498db;
+            color: white;
+            border-bottom: 2px solid #3498db;
+        }}
+
+        .tab-content {{
+            display: none;
+            animation: fadeIn 0.3s;
+        }}
+
+        .tab-content.active {{
+            display: block;
+        }}
+
+        @keyframes fadeIn {{
+            from {{ opacity: 0; }}
+            to {{ opacity: 1; }}
+        }}
+
+        .chart-container {{
+            position: relative;
+            height: 400px;
+            margin: 20px 0;
+        }}
+
+        .filter-controls {{
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }}
+
+        .filter-controls input,
+        .filter-controls select {{
+            padding: 8px 12px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }}
+
+        .filter-controls button {{
+            padding: 8px 16px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }}
+
+        .filter-controls button:hover {{
+            background: #2980b9;
+        }}
+
+        table.sortable th {{
+            cursor: pointer;
+            user-select: none;
+        }}
+
+        table.sortable th:hover {{
+            background: #2980b9;
+        }}
+
+        table.sortable th::after {{
+            content: ' ⇅';
+            opacity: 0.3;
+        }}
+
+        table.sortable th.sorted-asc::after {{
+            content: ' ↑';
+            opacity: 1;
+        }}
+
+        table.sortable th.sorted-desc::after {{
+            content: ' ↓';
+            opacity: 1;
+        }}
     </style>
 </head>
 <body>
@@ -293,18 +429,216 @@ fn build_html_report(result: &CrawlResult) -> String {
                 <div class="stat-value">{}</div>
             </div>
         </div>
-        
-        {}
-        
-        {}
-        
-        {}
+
+        <!-- Tabs Navigation -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('overview')">📊 Overview Charts</button>
+            <button class="tab" onclick="switchTab('secrets')">🔒 Security Findings</button>
+            <button class="tab" onclick="switchTab('pages')">📄 Pages</button>
+            <button class="tab" onclick="switchTab('endpoints')">🔗 Endpoints</button>
+        </div>
+
+        <!-- Tab Content: Overview Charts -->
+        <div id="overview" class="tab-content active">
+            <h2>📈 Statistics Charts</h2>
+            <div class="chart-container">
+                <canvas id="statusChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="depthChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Tab Content: Security Findings -->
+        <div id="secrets" class="tab-content">
+            {}
+        </div>
+
+        <!-- Tab Content: Pages -->
+        <div id="pages" class="tab-content">
+            {}
+        </div>
+
+        <!-- Tab Content: Endpoints -->
+        <div id="endpoints" class="tab-content">
+            {}
+        </div>
         
         <div class="footer">
             <p>Generated by <strong>Hazler</strong> - Next-Generation Web Crawler</p>
             <p>Report generated at {}</p>
         </div>
     </div>
+
+    <script>
+    // Tab switching function
+    function switchTab(tabName) {{
+        // Hide all tab contents
+        document.querySelectorAll('.tab-content').forEach(content => {{
+            content.classList.remove('active');
+        }});
+        
+        // Remove active class from all tabs
+        document.querySelectorAll('.tab').forEach(tab => {{
+            tab.classList.remove('active');
+        }});
+        
+        // Show selected tab content
+        document.getElementById(tabName).classList.add('active');
+        
+        // Add active class to clicked tab
+        event.target.classList.add('active');
+    }}
+
+    // Status Code Chart
+    const statusCtx = document.getElementById('statusChart');
+    new Chart(statusCtx, {{
+        type: 'bar',
+        data: {{
+            labels: {},
+            datasets: [{{
+                label: 'Number of Pages',
+                data: {},
+                backgroundColor: [
+                    'rgba(39, 174, 96, 0.7)',
+                    'rgba(243, 156, 18, 0.7)',
+                    'rgba(231, 76, 60, 0.7)',
+                    'rgba(192, 57, 43, 0.7)'
+                ],
+                borderColor: [
+                    'rgba(39, 174, 96, 1)',
+                    'rgba(243, 156, 18, 1)',
+                    'rgba(231, 76, 60, 1)',
+                    'rgba(192, 57, 43, 1)'
+                ],
+                borderWidth: 2
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {{
+                title: {{
+                    display: true,
+                    text: 'HTTP Status Code Distribution'
+                }}
+            }},
+            scales: {{
+                y: {{
+                    beginAtZero: true
+                }}
+            }}
+        }}
+    }});
+
+    // Depth Chart
+    const depthCtx = document.getElementById('depthChart');
+    new Chart(depthCtx, {{
+        type: 'line',
+        data: {{
+            labels: {},
+            datasets: [{{
+                label: 'Pages per Depth',
+                data: {},
+                fill: true,
+                backgroundColor: 'rgba(52, 152, 219, 0.2)',
+                borderColor: 'rgba(52, 152, 219, 1)',
+                borderWidth: 2,
+                tension: 0.4
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {{
+                title: {{
+                    display: true,
+                    text: 'Crawl Depth Distribution'
+                }}
+            }},
+            scales: {{
+                y: {{
+                    beginAtZero: true
+                }}
+            }}
+        }}
+    }});
+
+    // Table sorting functionality
+    document.querySelectorAll('table.sortable th').forEach((th, index) => {{
+        th.addEventListener('click', function() {{
+            const table = th.closest('table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            const isAscending = th.classList.contains('sorted-asc');
+            
+            // Remove all sorting classes
+            table.querySelectorAll('th').forEach(header => {{
+                header.classList.remove('sorted-asc', 'sorted-desc');
+            }});
+            
+            // Sort rows
+            rows.sort((a, b) => {{
+                const aValue = a.children[index].textContent;
+                const bValue = b.children[index].textContent;
+                
+                // Try numeric comparison
+                const aNum = parseFloat(aValue);
+                const bNum = parseFloat(bValue);
+                
+                if (!isNaN(aNum) && !isNaN(bNum)) {{
+                    return isAscending ? bNum - aNum : aNum - bNum;
+                }}
+                
+                // String comparison
+                return isAscending ? 
+                    bValue.localeCompare(aValue) : 
+                    aValue.localeCompare(bValue);
+            }});
+            
+            // Apply sorting class
+            th.classList.add(isAscending ? 'sorted-desc' : 'sorted-asc');
+            
+            // Reorder rows in table
+            rows.forEach(row => tbody.appendChild(row));
+        }});
+    }});
+
+    // Table filtering functionality
+    function filterTable() {{
+        const urlFilter = document.getElementById('urlFilter').value.toLowerCase();
+        const statusFilter = document.getElementById('statusFilter').value;
+        const table = document.querySelector('table.sortable');
+        const tbody = table.querySelector('tbody');
+        const rows = tbody.querySelectorAll('tr');
+
+        rows.forEach(row => {{
+            const url = row.children[0].textContent.toLowerCase();
+            const status = row.children[1].textContent;
+            
+            let showRow = true;
+            
+            // URL filter
+            if (urlFilter && !url.includes(urlFilter)) {{
+                showRow = false;
+            }}
+            
+            // Status filter
+            if (statusFilter && !status.startsWith(statusFilter)) {{
+                showRow = false;
+            }}
+            
+            row.style.display = showRow ? '' : 'none';
+        }});
+    }}
+
+    function resetFilters() {{
+        document.getElementById('urlFilter').value = '';
+        document.getElementById('statusFilter').value = '';
+        filterTable();
+    }}
+    </script>
 </body>
 </html>"#,
         timestamp,
@@ -324,7 +658,11 @@ fn build_html_report(result: &CrawlResult) -> String {
         ),
         build_pages_section(result),
         build_endpoints_section(result),
-        timestamp
+        timestamp,
+        status_labels_json,
+        status_values_json,
+        depth_labels_json,
+        depth_values_json
     )
 }
 
@@ -422,7 +760,18 @@ fn build_pages_section(result: &CrawlResult) -> String {
     let mut html = String::from(
         r#"
         <h2>📄 Crawled Pages</h2>
-        <table>
+        <div class="filter-controls">
+            <input type="text" id="urlFilter" placeholder="Filter by URL..." onkeyup="filterTable()">
+            <select id="statusFilter" onchange="filterTable()">
+                <option value="">All Status Codes</option>
+                <option value="2">2xx Success</option>
+                <option value="3">3xx Redirect</option>
+                <option value="4">4xx Error</option>
+                <option value="5">5xx Server Error</option>
+            </select>
+            <button onclick="resetFilters()">Reset Filters</button>
+        </div>
+        <table class="sortable">
             <thead>
                 <tr>
                     <th>URL</th>

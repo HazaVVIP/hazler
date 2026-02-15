@@ -153,18 +153,18 @@ mod tests {
         result.total_pages = 1;
         result.total_urls = 1;
 
-        let db_path = std::path::Path::new("/tmp/test_crawl.db");
-        let res = export_to_sqlite(&result, db_path);
+        let db_path = std::env::temp_dir().join("test_crawl.db");
+        let res = export_to_sqlite(&result, &db_path);
         assert!(res.is_ok());
 
         // Verify data was inserted
-        let conn = Connection::open(db_path).unwrap();
+        let conn = Connection::open(&db_path).unwrap();
         let count: i32 = conn
             .query_row("SELECT COUNT(*) FROM pages", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 1);
 
         // Clean up
-        let _ = std::fs::remove_file(db_path);
+        let _ = std::fs::remove_file(&db_path);
     }
 }

@@ -244,11 +244,11 @@ mod tests {
         result.total_pages = 1;
         result.total_urls = 1;
 
-        let output_path = std::path::Path::new("/tmp/test_report.pdf");
-        let res = generate_pdf_report(&result, output_path);
+        let output_path = std::env::temp_dir().join("test_report.pdf");
+        let res = generate_pdf_report(&result, &output_path);
         assert!(res.is_ok());
 
         // Clean up
-        let _ = std::fs::remove_file(output_path);
+        let _ = std::fs::remove_file(&output_path);
     }
 }

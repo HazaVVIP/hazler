@@ -30,6 +30,14 @@ impl HttpClient {
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::limited(10))
             .cookie_store(true) // Enable cookie jar for session management
+            // Performance optimizations
+            .http2_prior_knowledge() // Enable HTTP/2 by default
+            .pool_max_idle_per_host(10) // Connection pooling: keep 10 idle connections per host
+            .pool_idle_timeout(Duration::from_secs(90)) // Keep connections alive for 90s
+            .tcp_keepalive(Duration::from_secs(60)) // TCP keepalive to maintain connections
+            .gzip(true) // Enable gzip compression
+            .brotli(true) // Enable brotli compression
+            .deflate(true) // Enable deflate compression
             .build()
             .map_err(Error::RequestFailed)?;
 
@@ -74,7 +82,7 @@ impl HttpClient {
     fn apply_auth(
         &self,
         mut request: reqwest::RequestBuilder,
-        url: &Url,
+        _url: &Url,
         auth_method: &AuthMethod,
     ) -> Result<reqwest::RequestBuilder> {
         match auth_method {

@@ -1,6 +1,7 @@
 # Git
 .git
 .gitignore
+.github
 
 # Target directory
 target/
@@ -27,5 +28,17 @@ Thumbs.db
 AUDIT_*.md
 AUDIT_*.txt
 hazler-audit.md
-IMPLEMENTATION_SUMMARY.md
+IMPLEMENTATION_SUMMARY*.md
 any.bak
+
+# CI/CD
+.github/
+
+# Examples and scripts
+examples/
+scripts/
+
+# Benchmark artifacts
+target/criterion/
+benches/
+

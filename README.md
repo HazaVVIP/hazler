@@ -703,6 +703,31 @@ subfinder -d target.com | \
   grep "?" > params.txt
 ```
 
+### URL File Format
+
+When using pipeline mode with a file, you can:
+- Include comments by starting lines with `#`
+- Have empty lines (they will be skipped)
+- List one URL per line
+
+Example `urls.txt`:
+```
+# Production targets
+https://example.com
+https://api.example.com
+
+# Staging environment
+https://staging.example.com
+
+# Skip this one
+# https://old.example.com
+```
+
+Usage:
+```bash
+cat urls.txt | hazler - -o urls
+```
+
 ## Output Processing Examples
 
 ### Using with jq

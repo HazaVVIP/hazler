@@ -343,7 +343,8 @@ impl OutputFormatter {
             let extension = path
                 .split('/')
                 .last()
-                .and_then(|f| f.split('.').nth(1))
+                .and_then(|f| f.rsplit_once('.'))
+                .map(|(_, ext)| ext)
                 .unwrap_or("null");
 
             // Create minimal HTTP request

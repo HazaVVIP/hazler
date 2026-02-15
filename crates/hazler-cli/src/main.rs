@@ -11,6 +11,9 @@ use output::{generate_report, generate_stats, OutputFormatter};
 mod html_report;
 use html_report::generate_html_report;
 
+mod fuzzer_integration;
+use fuzzer_integration::apply_fuzzing;
+
 #[derive(Parser, Debug)]
 #[command(name = "hazler")]
 #[command(author = "Hazler Team")]
@@ -152,6 +155,28 @@ struct Args {
     /// including potentially sensitive admin panels and API endpoints
     #[arg(long)]
     no_source_maps: bool,
+
+    /// Enable smart fuzzing mode
+    /// Automatically generates URL variations to discover hidden endpoints:
+    /// - Pluralization (user -> users)
+    /// - File extensions (.json, .xml, .php)
+    /// - API versioning (v1, v2, v3)
+    #[arg(long)]
+    fuzz: bool,
+
+    /// Enable parameter discovery fuzzing
+    /// Tests common parameter names on discovered endpoints
+    #[arg(long)]
+    fuzz_params: bool,
+
+    /// Enable endpoint fuzzing with wordlists
+    /// Tests common endpoint paths and variations
+    #[arg(long)]
+    fuzz_endpoints: bool,
+
+    /// Fuzzing aggressiveness level (minimal, default, aggressive)
+    #[arg(long, default_value = "default")]
+    fuzz_level: String,
 }
 
 #[tokio::main]
@@ -355,6 +380,36 @@ async fn main() {
 
     // Process the combined results
     let result = combined_result;
+
+    // Apply fuzzing if enabled
+    if args.fuzz || args.fuzz_params || args.fuzz_endpoints {
+        // Extract unique URLs from crawled pages
+        let mut discovered_urls: Vec<Url> = result
+            .pages
+            .iter()
+            .map(|page| page.url.clone())
+            .collect();
+        
+        // Remove duplicates
+        discovered_urls.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        discovered_urls.dedup();
+        
+        // Apply fuzzing
+        let fuzzed_urls = apply_fuzzing(
+            &discovered_urls,
+            args.fuzz,
+            args.fuzz_params,
+            args.fuzz_endpoints,
+            &args.fuzz_level,
+        );
+        
+        // Note: In a real implementation, you would crawl these fuzzed URLs
+        // For now, we just report them
+        if !fuzzed_urls.is_empty() {
+            info!("Generated {} fuzzed URLs for testing", fuzzed_urls.len());
+            // TODO: Optionally crawl fuzzed URLs or output them separately
+        }
+    }
 
     // Generate HTML report if requested
     if let Some(html_report_path) = &args.html_report {

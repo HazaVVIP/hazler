@@ -803,6 +803,7 @@ dependencies = [
  "clap",
  "colored",
  "hazler-core",
+ "hazler-fuzzer",
  "hazler-http",
  "hazler-parser",
  "indicatif",
@@ -831,6 +832,17 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "url",
+]
+
+[[package]]
+name = "hazler-fuzzer"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
  "url",
 ]
 

@@ -1407,12 +1407,12 @@ Transform Hazler into a **production-ready, enterprise-grade** security reconnai
 - [x] **Version tagging** - Updated Docker labels to version 0.2.0
 
 ##### Installation Script
-- [ ] **Install.sh improvements** - Enhance installation script robustness
-- [ ] **Platform detection** - Auto-detect OS and architecture
-- [ ] **Dependency checking** - Verify required dependencies before install
+- [x] **Install.sh improvements** - Enhanced with silent mode, version selection, better error handling
+- [x] **Platform detection** - Auto-detect OS and architecture (linux/macos/windows + x86_64/aarch64/armv7)
+- [x] **Dependency checking** - Verify required dependencies before install (already implemented)
 - [ ] **Update mechanism** - Support in-place updates
-- [ ] **Uninstall support** - Clean uninstallation script
-- [ ] **Silent mode** - Non-interactive installation for CI/CD
+- [x] **Uninstall support** - Created uninstall.sh with config cleanup options
+- [x] **Silent mode** - Non-interactive installation for CI/CD (--silent flag)
 
 ##### Package Manager Distribution
 - [ ] **Cargo publish** - Publish to crates.io

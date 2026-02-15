@@ -6,8 +6,8 @@ use crate::queue::UrlQueue;
 use crate::scope::ScopeValidator;
 use crate::types::{CrawlResult, Finding, FindingStats, Page, Severity};
 use hazler_http::HttpClient;
-use hazler_js_parser::{FrameFileParser, JavaScriptParser};
-use hazler_parser::HtmlParser;
+use hazler_js_parser::{FrameFileParser, JavaScriptParser, SourceMapParser};
+use hazler_parser::{HtmlParser, GraphQLParser};
 use hazler_secrets::SecretScanner;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -24,6 +24,8 @@ struct CrawlPageContext {
     parser: HtmlParser,
     js_parser: JavaScriptParser,
     frame_parser: FrameFileParser,
+    graphql_parser: GraphQLParser,
+    sourcemap_parser: SourceMapParser,
     url_normalizer: AdvancedUrlNormalizer,
     scope_validator: ScopeValidator,
     max_depth: usize,
@@ -31,6 +33,8 @@ struct CrawlPageContext {
     secret_scanner: Option<SecretScanner>,
     noise_filter: Arc<Mutex<NoiseFilter>>,
     delay_config: Option<DelayConfig>,
+    graphql_introspect: bool,
+    parse_source_maps: bool,
     #[cfg(feature = "browser")]
     browser: Option<Arc<Browser>>,
 }
@@ -42,6 +46,8 @@ pub struct Crawler {
     parser: HtmlParser,
     js_parser: JavaScriptParser,
     frame_parser: FrameFileParser,
+    graphql_parser: GraphQLParser,
+    sourcemap_parser: SourceMapParser,
     url_normalizer: AdvancedUrlNormalizer,
     secret_scanner: Option<SecretScanner>,
     #[cfg(feature = "browser")]
@@ -67,6 +73,8 @@ impl Crawler {
             .map_err(|e| anyhow::anyhow!("Failed to create JS parser: {}", e))?;
         let frame_parser = FrameFileParser::new()
             .map_err(|e| anyhow::anyhow!("Failed to create frame parser: {}", e))?;
+        let graphql_parser = GraphQLParser::new();
+        let sourcemap_parser = SourceMapParser::new();
         let url_normalizer = AdvancedUrlNormalizer::new();
 
         // Initialize secret scanner if secrets scanning is enabled
@@ -82,6 +90,8 @@ impl Crawler {
             parser,
             js_parser,
             frame_parser,
+            graphql_parser,
+            sourcemap_parser,
             url_normalizer,
             secret_scanner,
             #[cfg(feature = "browser")]
@@ -172,6 +182,8 @@ impl Crawler {
                     let parser = self.parser.clone();
                     let js_parser = self.js_parser.clone();
                     let frame_parser = self.frame_parser.clone();
+                    let graphql_parser = self.graphql_parser.clone();
+                    let sourcemap_parser = self.sourcemap_parser.clone();
                     let url_normalizer = self.url_normalizer.clone();
                     let scope_validator = scope_validator.clone();
                     let max_depth = self.config.max_depth;
@@ -179,6 +191,8 @@ impl Crawler {
                     let secret_scanner = self.secret_scanner.clone();
                     let noise_filter = Arc::clone(&noise_filter);
                     let delay_config = delay_config.clone();
+                    let graphql_introspect = self.config.graphql_introspect;
+                    let parse_source_maps = self.config.parse_source_maps;
                     #[cfg(feature = "browser")]
                     let browser = self.browser.clone();
 
@@ -195,6 +209,8 @@ impl Crawler {
                             parser,
                             js_parser,
                             frame_parser,
+                            graphql_parser,
+                            sourcemap_parser,
                             url_normalizer,
                             scope_validator,
                             max_depth,
@@ -202,6 +218,8 @@ impl Crawler {
                             secret_scanner,
                             noise_filter,
                             delay_config,
+                            graphql_introspect,
+                            parse_source_maps,
                             #[cfg(feature = "browser")]
                             browser,
                         };
@@ -478,6 +496,15 @@ impl Crawler {
                     warn!("Failed to parse links from {}: {}", url, e);
                 }
             }
+
+            // Check for GraphQL endpoint references in HTML
+            if let Some(graphql_endpoint) = context.graphql_parser.detect_graphql_endpoint(&url, &response.body) {
+                info!(
+                    "GraphQL endpoint detected at {} (confidence: {:.2})",
+                    graphql_endpoint.url, graphql_endpoint.confidence
+                );
+                debug!("GraphQL indicators: {:?}", graphql_endpoint.indicators);
+            }
         } else if content_type.contains("javascript")
             || content_type.contains("application/json")
             || url.path().ends_with(".js")
@@ -491,6 +518,48 @@ impl Crawler {
                 url
             );
             links = extracted;
+
+            // Check for GraphQL endpoint
+            if let Some(graphql_endpoint) = context.graphql_parser.detect_graphql_endpoint(&url, &response.body) {
+                info!(
+                    "GraphQL endpoint detected at {} (confidence: {:.2})",
+                    graphql_endpoint.url, graphql_endpoint.confidence
+                );
+                debug!("GraphQL indicators: {:?}", graphql_endpoint.indicators);
+            }
+
+            // Check for source map references in JS files
+            if context.parse_source_maps && url.path().ends_with(".js") {
+                let source_map_refs = context.sourcemap_parser.detect_source_map_references(&response.body, &url);
+                if !source_map_refs.is_empty() {
+                    info!(
+                        "Found {} source map reference(s) for {}",
+                        source_map_refs.len(),
+                        url
+                    );
+                    for sm_ref in source_map_refs {
+                        if !sm_ref.inline {
+                            debug!("Source map URL: {}", sm_ref.map_url);
+                            // Add source map URL to links to be crawled
+                            links.push(sm_ref.map_url);
+                        }
+                    }
+                }
+            }
+
+            // Parse source map files (.map extension)
+            if context.parse_source_maps && url.path().ends_with(".map") {
+                match context.sourcemap_parser.parse_source_map(&response.body) {
+                    Ok(source_map) => {
+                        let analysis = context.sourcemap_parser.analyze_source_map(&source_map, url.as_str());
+                        let report = context.sourcemap_parser.generate_report(&analysis);
+                        info!("{}", report);
+                    }
+                    Err(e) => {
+                        debug!("Failed to parse source map at {}: {}", url, e);
+                    }
+                }
+            }
         } else if url.path().ends_with(".frame") {
             // Frame file - use frame parser
             let extracted = context.frame_parser.extract_endpoints(&response.body, &url);

@@ -140,6 +140,18 @@ struct Args {
     /// When enabled, the browser will not load images
     #[arg(long)]
     disable_images: bool,
+
+    /// Enable GraphQL introspection queries
+    /// Automatically runs introspection queries on detected GraphQL endpoints
+    /// to extract schema information (types, queries, mutations)
+    #[arg(long)]
+    graphql_introspect: bool,
+
+    /// Disable source map parsing (enabled by default)
+    /// Source maps reveal original source code structure and paths
+    /// including potentially sensitive admin panels and API endpoints
+    #[arg(long)]
+    no_source_maps: bool,
 }
 
 #[tokio::main]
@@ -273,6 +285,10 @@ async fn main() {
             config = config.disable_images(true);
         }
     }
+
+    // Apply GraphQL and Source Map settings
+    config = config.graphql_introspect(args.graphql_introspect);
+    config = config.parse_source_maps(!args.no_source_maps);
 
     // Create and run crawler (mutable to support browser initialization)
     let mut crawler = match Crawler::new(config) {

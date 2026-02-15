@@ -53,6 +53,10 @@ pub struct Config {
     pub screenshot_path: Option<String>,
     /// Disable images in headless browser for faster loading
     pub disable_images: bool,
+    /// Enable GraphQL introspection queries
+    pub graphql_introspect: bool,
+    /// Enable source map parsing (enabled by default)
+    pub parse_source_maps: bool,
 }
 
 impl Default for Config {
@@ -75,6 +79,8 @@ impl Default for Config {
             use_headless_browser: false,
             screenshot_path: None,
             disable_images: false,
+            graphql_introspect: false,
+            parse_source_maps: true, // Enable source map parsing by default
         }
     }
 }
@@ -353,6 +359,44 @@ impl Config {
     /// ```
     pub fn disable_images(mut self, enabled: bool) -> Self {
         self.disable_images = enabled;
+        self
+    }
+
+    /// Enable GraphQL introspection queries.
+    ///
+    /// When enabled, automatically runs introspection queries on detected
+    /// GraphQL endpoints to extract schema information including types,
+    /// queries, mutations, and subscriptions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().graphql_introspect(true);
+    /// assert_eq!(config.graphql_introspect, true);
+    /// ```
+    pub fn graphql_introspect(mut self, enabled: bool) -> Self {
+        self.graphql_introspect = enabled;
+        self
+    }
+
+    /// Enable or disable source map parsing.
+    ///
+    /// When enabled (default), automatically detects and parses source maps
+    /// to reveal original source code structure, potentially exposing
+    /// admin panels, API endpoints, and sensitive paths.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().parse_source_maps(false);
+    /// assert_eq!(config.parse_source_maps, false);
+    /// ```
+    pub fn parse_source_maps(mut self, enabled: bool) -> Self {
+        self.parse_source_maps = enabled;
         self
     }
 }

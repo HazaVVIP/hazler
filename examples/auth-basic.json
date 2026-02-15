@@ -1,0 +1,15 @@
+{
+  "method": {
+    "Basic": {
+      "username": "admin",
+      "password": "secret123"
+    }
+  },
+  "session": {
+    "enabled": true,
+    "refresh_interval": 0,
+    "refresh_url": null,
+    "refresh_credentials": null
+  },
+  "form_auth": null
+}

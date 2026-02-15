@@ -70,7 +70,8 @@ impl ChangeDetector {
 
         let change_type =
             self.determine_change_type(similarity, size_diff, size_before, size_after);
-        let is_significant = self.is_change_significant(similarity, size_diff.unsigned_abs() as usize);
+        let is_significant =
+            self.is_change_significant(similarity, size_diff.unsigned_abs() as usize);
         let description = self.generate_description(&change_type, similarity, size_diff);
 
         ResponseChange {

@@ -820,6 +820,7 @@ name = "hazler-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "futures",
  "hazler-browser",
  "hazler-http",

@@ -83,16 +83,21 @@
 //! # }
 //! ```
 
+pub mod circuit_breaker;
 pub mod config;
 pub mod crawler;
 pub mod delay;
 pub mod differ;
 pub mod noise_filter;
 pub mod normalizer;
+pub mod persistence;
 pub mod queue;
+pub mod rate_limiter;
+pub mod retry;
 pub mod scope;
 pub mod types;
 
+pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
 pub use config::Config;
 pub use crawler::Crawler;
 pub use delay::DelayConfig;
@@ -103,6 +108,11 @@ pub use differ::{
 };
 pub use noise_filter::{NoiseFilter, NoiseFilterStats, ResponsePattern};
 pub use normalizer::AdvancedUrlNormalizer;
+pub use persistence::{
+    AutoSave, ConfigSnapshot, CrawlState, PersistenceBackend, QueuedUrl, StatePersistence,
+};
 pub use queue::UrlQueue;
+pub use rate_limiter::{RateLimiter, RateLimiterConfig};
+pub use retry::{is_retryable_status, retry_with_backoff, RetryConfig};
 pub use scope::ScopeValidator;
 pub use types::{CrawlResult, Finding, FindingStats, Page, Severity};

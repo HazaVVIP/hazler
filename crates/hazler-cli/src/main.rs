@@ -1,6 +1,9 @@
 use clap::Parser;
 use colored::Colorize;
 use hazler_core::{Config, Crawler};
+use hazler_http::{ApiKeyLocation, AuthConfig, AuthMethod, FormAuth};
+use std::collections::HashMap;
+use std::fs;
 use std::process;
 use tracing::{error, info, Level};
 use url::Url;
@@ -242,6 +245,205 @@ struct Args {
     /// Example: --progress 5
     #[arg(long, default_value = "5")]
     progress: u64,
+
+    // ===== Authentication Options =====
+    /// Basic Auth credentials (username:password)
+    /// Example: --auth-basic "user:pass"
+    #[arg(long, value_name = "CREDENTIALS")]
+    auth_basic: Option<String>,
+
+    /// Bearer token for authentication
+    /// Example: --auth-bearer "eyJhbGc..."
+    #[arg(long, value_name = "TOKEN")]
+    auth_bearer: Option<String>,
+
+    /// Cookie for authentication (name=value format, can be repeated)
+    /// Example: --auth-cookie "session=abc123"
+    #[arg(long, value_name = "COOKIE")]
+    auth_cookie: Vec<String>,
+
+    /// Custom header for authentication (Name:Value format)
+    /// Example: --auth-header "X-API-Key:secret"
+    #[arg(long, value_name = "HEADER")]
+    auth_header: Option<String>,
+
+    /// API key for authentication
+    /// Example: --auth-apikey "your-api-key"
+    #[arg(long, value_name = "KEY")]
+    auth_apikey: Option<String>,
+
+    /// API key location (header, query, or cookie)
+    /// Default: header
+    #[arg(long, default_value = "header")]
+    auth_apikey_location: String,
+
+    /// API key name (header/param/cookie name)
+    /// Default: X-API-Key
+    #[arg(long, default_value = "X-API-Key")]
+    auth_apikey_name: String,
+
+    /// OAuth2 access token
+    /// Example: --auth-oauth "access-token"
+    #[arg(long, value_name = "TOKEN")]
+    auth_oauth: Option<String>,
+
+    /// Load authentication configuration from JSON file
+    /// Example: --auth-file credentials.json
+    #[arg(long, value_name = "FILE")]
+    auth_file: Option<String>,
+
+    /// Form-based login URL
+    /// Example: --auth-form-url "https://example.com/login"
+    #[arg(long, value_name = "URL")]
+    auth_form_url: Option<String>,
+
+    /// Form username field name
+    /// Default: username
+    #[arg(long, default_value = "username")]
+    auth_form_user_field: String,
+
+    /// Form password field name
+    /// Default: password
+    #[arg(long, default_value = "password")]
+    auth_form_pass_field: String,
+
+    /// Form username value
+    #[arg(long, value_name = "USERNAME")]
+    auth_form_username: Option<String>,
+
+    /// Form password value
+    #[arg(long, value_name = "PASSWORD")]
+    auth_form_password: Option<String>,
+}
+
+/// Build authentication configuration from CLI arguments
+fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
+    // Load from file if provided
+    if let Some(ref auth_file) = args.auth_file {
+        let content = fs::read_to_string(auth_file)
+            .map_err(|e| format!("Failed to read auth file: {}", e))?;
+        let config = AuthConfig::from_json(&content)
+            .map_err(|e| format!("Failed to parse auth file: {}", e))?;
+        return Ok(Some(config));
+    }
+
+    // Build from CLI arguments
+    let mut auth_method = None;
+
+    // Check for Basic Auth
+    if let Some(ref creds) = args.auth_basic {
+        let parts: Vec<&str> = creds.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            return Err("Basic auth must be in format username:password".to_string());
+        }
+        auth_method = Some(AuthMethod::Basic {
+            username: parts[0].to_string(),
+            password: parts[1].to_string(),
+        });
+    }
+
+    // Check for Bearer Token
+    if let Some(ref token) = args.auth_bearer {
+        if auth_method.is_some() {
+            return Err("Multiple authentication methods specified. Please use only one.".to_string());
+        }
+        auth_method = Some(AuthMethod::Bearer {
+            token: token.clone(),
+        });
+    }
+
+    // Check for Cookie Auth
+    if !args.auth_cookie.is_empty() {
+        if auth_method.is_some() {
+            return Err("Multiple authentication methods specified. Please use only one.".to_string());
+        }
+        let mut cookies = HashMap::new();
+        for cookie in &args.auth_cookie {
+            let parts: Vec<&str> = cookie.splitn(2, '=').collect();
+            if parts.len() != 2 {
+                return Err(format!("Invalid cookie format: {}. Use name=value", cookie));
+            }
+            cookies.insert(parts[0].to_string(), parts[1].to_string());
+        }
+        auth_method = Some(AuthMethod::Cookie { cookies });
+    }
+
+    // Check for Custom Header
+    if let Some(ref header) = args.auth_header {
+        if auth_method.is_some() {
+            return Err("Multiple authentication methods specified. Please use only one.".to_string());
+        }
+        let parts: Vec<&str> = header.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            return Err("Custom header must be in format Name:Value".to_string());
+        }
+        auth_method = Some(AuthMethod::Header {
+            name: parts[0].to_string(),
+            value: parts[1].to_string(),
+        });
+    }
+
+    // Check for API Key
+    if let Some(ref key) = args.auth_apikey {
+        if auth_method.is_some() {
+            return Err("Multiple authentication methods specified. Please use only one.".to_string());
+        }
+        let location = match args.auth_apikey_location.to_lowercase().as_str() {
+            "header" => ApiKeyLocation::Header,
+            "query" => ApiKeyLocation::Query,
+            "cookie" => ApiKeyLocation::Cookie,
+            _ => return Err("API key location must be: header, query, or cookie".to_string()),
+        };
+        auth_method = Some(AuthMethod::ApiKey {
+            key: key.clone(),
+            location,
+            name: args.auth_apikey_name.clone(),
+        });
+    }
+
+    // Check for OAuth2
+    if let Some(ref token) = args.auth_oauth {
+        if auth_method.is_some() {
+            return Err("Multiple authentication methods specified. Please use only one.".to_string());
+        }
+        auth_method = Some(AuthMethod::OAuth2 {
+            access_token: token.clone(),
+            token_type: Some("Bearer".to_string()),
+            refresh_token: None,
+            expires_in: None,
+        });
+    }
+
+    // Build form auth if provided
+    let form_auth = if let Some(ref url) = args.auth_form_url {
+        if args.auth_form_username.is_none() || args.auth_form_password.is_none() {
+            return Err("Form auth requires --auth-form-username and --auth-form-password".to_string());
+        }
+        Some(FormAuth {
+            login_url: url.clone(),
+            username_field: args.auth_form_user_field.clone(),
+            password_field: args.auth_form_pass_field.clone(),
+            username: args.auth_form_username.as_ref().unwrap().clone(),
+            password: args.auth_form_password.as_ref().unwrap().clone(),
+            extra_fields: HashMap::new(),
+            follow_redirects: true,
+        })
+    } else {
+        None
+    };
+
+    // Return auth config if any method was specified
+    if let Some(method) = auth_method {
+        let mut config = AuthConfig::new(method);
+        if let Some(form) = form_auth {
+            config = config.with_form_auth(form);
+        }
+        Ok(Some(config))
+    } else if form_auth.is_some() {
+        return Err("Form auth URL specified but no authentication method provided".to_string());
+    } else {
+        Ok(None)
+    }
 }
 
 #[tokio::main]
@@ -336,12 +538,26 @@ async fn main() {
         )
     };
 
+    // Parse authentication configuration early (before borrowing args for other values)
+    let auth_config = match build_auth_config(&args) {
+        Ok(config) => config,
+        Err(e) => {
+            error!("Authentication configuration error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    // Display authentication info if configured
+    if let Some(ref auth) = auth_config {
+        info!("Authentication enabled: {}", auth.method.sanitized_display());
+    }
+
     // Configure the crawler
     let mut config = Config::new()
         .max_depth(max_depth)
         .concurrency(args.concurrency)
         .max_pages(max_pages)
-        .user_agent(args.user_agent)
+        .user_agent(args.user_agent.clone())
         .timeout_secs(args.timeout)
         .aggressive(aggressive);
 

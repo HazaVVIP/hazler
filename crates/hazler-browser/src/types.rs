@@ -6,28 +6,28 @@ use url::Url;
 pub struct BrowserConfig {
     /// Whether to run in headless mode (default: true)
     pub headless: bool,
-    
+
     /// Request timeout in seconds (default: 30)
     pub timeout_secs: u64,
-    
+
     /// Window width (default: 1920)
     pub window_width: u32,
-    
+
     /// Window height (default: 1080)
     pub window_height: u32,
-    
+
     /// Whether to enable request interception
     pub intercept_requests: bool,
-    
+
     /// Path to save screenshots (optional)
     pub screenshot_path: Option<String>,
-    
+
     /// User agent string (optional)
     pub user_agent: Option<String>,
-    
+
     /// Whether to disable images for faster loading
     pub disable_images: bool,
-    
+
     /// Whether to disable JavaScript (default: false)
     pub disable_javascript: bool,
 }
@@ -53,22 +53,22 @@ impl Default for BrowserConfig {
 pub struct PageLoadResult {
     /// The final URL (after redirects)
     pub url: Url,
-    
+
     /// HTTP status code
     pub status_code: u16,
-    
+
     /// Extracted links from the page
     pub links: Vec<String>,
-    
+
     /// Page title
     pub title: Option<String>,
-    
+
     /// Screenshot data (if enabled)
     pub screenshot_data: Option<Vec<u8>>,
-    
+
     /// Cookies from the page
     pub cookies: Vec<Cookie>,
-    
+
     /// All intercepted network requests (including API calls)
     pub network_requests: Vec<NetworkRequest>,
 }
@@ -78,22 +78,22 @@ pub struct PageLoadResult {
 pub struct NetworkRequest {
     /// Request URL
     pub url: String,
-    
+
     /// HTTP method
     pub method: String,
-    
+
     /// Request headers
     pub headers: std::collections::HashMap<String, String>,
-    
+
     /// Request body/payload (if any)
     pub post_data: Option<String>,
-    
+
     /// Resource type (Document, Stylesheet, Script, XHR, Fetch, etc.)
     pub resource_type: String,
-    
+
     /// Request ID
     pub request_id: String,
-    
+
     /// Timestamp
     pub timestamp: f64,
 }

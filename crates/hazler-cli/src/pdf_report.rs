@@ -13,12 +13,8 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
 
     // Create PDF document
-    let (doc, page1, layer1) = PdfDocument::new(
-        "Hazler Crawl Report",
-        Mm(210.0),
-        Mm(297.0),
-        "Layer 1",
-    );
+    let (doc, page1, layer1) =
+        PdfDocument::new("Hazler Crawl Report", Mm(210.0), Mm(297.0), "Layer 1");
     let current_layer = doc.get_page(page1).get_layer(layer1);
 
     // Load fonts
@@ -31,7 +27,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     // Metadata
     let mut y_pos = 260.0;
     current_layer.use_text(
-        &format!("Generated: {}", timestamp),
+        format!("Generated: {}", timestamp),
         12.0,
         Mm(20.0),
         Mm(y_pos),
@@ -45,7 +41,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     y_pos -= 10.0;
 
     current_layer.use_text(
-        &format!("Total Pages Crawled: {}", result.total_pages),
+        format!("Total Pages Crawled: {}", result.total_pages),
         12.0,
         Mm(20.0),
         Mm(y_pos),
@@ -54,7 +50,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     y_pos -= 8.0;
 
     current_layer.use_text(
-        &format!("Total URLs Discovered: {}", result.total_urls),
+        format!("Total URLs Discovered: {}", result.total_urls),
         12.0,
         Mm(20.0),
         Mm(y_pos),
@@ -63,7 +59,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     y_pos -= 8.0;
 
     current_layer.use_text(
-        &format!("Errors Encountered: {}", result.errors.len()),
+        format!("Errors Encountered: {}", result.errors.len()),
         12.0,
         Mm(20.0),
         Mm(y_pos),
@@ -94,7 +90,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
         }
 
         current_layer.use_text(
-            &format!("Total Secrets: {}", total_secrets),
+            format!("Total Secrets: {}", total_secrets),
             12.0,
             Mm(20.0),
             Mm(y_pos),
@@ -104,7 +100,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
 
         if critical_secrets > 0 {
             current_layer.use_text(
-                &format!("Critical: {}", critical_secrets),
+                format!("Critical: {}", critical_secrets),
                 12.0,
                 Mm(30.0),
                 Mm(y_pos),
@@ -115,7 +111,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
 
         if high_secrets > 0 {
             current_layer.use_text(
-                &format!("High: {}", high_secrets),
+                format!("High: {}", high_secrets),
                 12.0,
                 Mm(30.0),
                 Mm(y_pos),
@@ -126,7 +122,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
 
         if medium_secrets > 0 {
             current_layer.use_text(
-                &format!("Medium: {}", medium_secrets),
+                format!("Medium: {}", medium_secrets),
                 12.0,
                 Mm(30.0),
                 Mm(y_pos),
@@ -137,7 +133,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
 
         if low_secrets > 0 {
             current_layer.use_text(
-                &format!("Low: {}", low_secrets),
+                format!("Low: {}", low_secrets),
                 12.0,
                 Mm(30.0),
                 Mm(y_pos),
@@ -168,14 +164,13 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
     for (code, count) in codes.iter().take(10) {
         if y_pos < 30.0 {
             // Add new page if needed
-            let (page_idx, layer_idx) =
-                doc.add_page(Mm(210.0), Mm(297.0), "Layer");
+            let (page_idx, layer_idx) = doc.add_page(Mm(210.0), Mm(297.0), "Layer");
             let _current_layer = doc.get_page(page_idx).get_layer(layer_idx);
             y_pos = 280.0;
         }
 
         current_layer.use_text(
-            &format!("Status {}: {} pages", code, count),
+            format!("Status {}: {} pages", code, count),
             12.0,
             Mm(30.0),
             Mm(y_pos),
@@ -192,7 +187,13 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
         y_pos = 280.0;
     }
 
-    current_layer.use_text("Crawled Pages (Top 20)", 16.0, Mm(20.0), Mm(y_pos), &font_bold);
+    current_layer.use_text(
+        "Crawled Pages (Top 20)",
+        16.0,
+        Mm(20.0),
+        Mm(y_pos),
+        &font_bold,
+    );
     y_pos -= 10.0;
 
     for (i, page) in result.pages.iter().take(20).enumerate() {
@@ -211,7 +212,7 @@ pub fn generate_pdf_report(result: &CrawlResult, output_path: &Path) -> anyhow::
         };
 
         current_layer.use_text(
-            &format!("{}. [{}] {}", i + 1, page.status_code, display_url),
+            format!("{}. [{}] {}", i + 1, page.status_code, display_url),
             10.0,
             Mm(25.0),
             Mm(y_pos),

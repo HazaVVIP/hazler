@@ -2,9 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Authentication method to use for HTTP requests
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum AuthMethod {
     /// No authentication
+    #[default]
     None,
     /// HTTP Basic Authentication (username:password)
     Basic { username: String, password: String },
@@ -88,9 +89,7 @@ impl AuthMethod {
     pub fn requires_session(&self) -> bool {
         matches!(
             self,
-            AuthMethod::Cookie { .. }
-                | AuthMethod::OAuth2 { .. }
-                | AuthMethod::Bearer { .. }
+            AuthMethod::Cookie { .. } | AuthMethod::OAuth2 { .. } | AuthMethod::Bearer { .. }
         )
     }
 
@@ -119,12 +118,6 @@ impl AuthMethod {
                 )
             }
         }
-    }
-}
-
-impl Default for AuthMethod {
-    fn default() -> Self {
-        AuthMethod::None
     }
 }
 
@@ -262,7 +255,7 @@ mod tests {
         let auth = AuthConfig::header("X-API-Key".to_string(), "secret".to_string());
         assert!(matches!(
             auth.method,
-            AuthMethod::Header { name, value } 
+            AuthMethod::Header { name, value }
             if name == "X-API-Key" && value == "secret"
         ));
     }

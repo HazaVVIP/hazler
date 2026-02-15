@@ -11,9 +11,9 @@
 //! 4. Final hash: set bit to 1 if accumulator > 0, else 0
 //! 5. Similarity is measured by Hamming distance between hashes
 
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use serde::{Deserialize, Serialize};
 
 /// SimHash value (64-bit fingerprint)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,7 +58,7 @@ impl SimHashCalculator {
     pub fn calculate(&self, text: &str) -> SimHash {
         // Extract features (words)
         let features = self.extract_features(text);
-        
+
         if features.is_empty() {
             return SimHash::new(0);
         }
@@ -72,6 +72,7 @@ impl SimHashCalculator {
             let hash = self.hash_feature(&feature);
 
             // Update accumulator based on hash bits
+            #[allow(clippy::needless_range_loop)]
             for i in 0..64 {
                 let bit = (hash >> i) & 1;
                 if bit == 1 {
@@ -84,6 +85,7 @@ impl SimHashCalculator {
 
         // Generate final hash
         let mut simhash: u64 = 0;
+        #[allow(clippy::needless_range_loop)]
         for i in 0..64 {
             if v[i] > 0 {
                 simhash |= 1u64 << i;
@@ -142,9 +144,12 @@ mod tests {
         let text2 = "The quick brown fox jumps over the lazy cat";
         let hash1 = calc.calculate(text1);
         let hash2 = calc.calculate(text2);
-        
+
         let similarity = hash1.similarity(&hash2);
-        assert!(similarity > 0.8, "Similar texts should have high similarity");
+        assert!(
+            similarity > 0.8,
+            "Similar texts should have high similarity"
+        );
     }
 
     #[test]
@@ -154,9 +159,12 @@ mod tests {
         let text2 = "Hello world from Rust";
         let hash1 = calc.calculate(text1);
         let hash2 = calc.calculate(text2);
-        
+
         let similarity = hash1.similarity(&hash2);
-        assert!(similarity < 0.5, "Different texts should have low similarity");
+        assert!(
+            similarity < 0.5,
+            "Different texts should have low similarity"
+        );
     }
 
     #[test]
@@ -213,7 +221,7 @@ mod tests {
         let html2 = "<html><body><h1>Welcome</h1><p>Hello Universe</p></body></html>";
         let hash1 = calc.calculate(html1);
         let hash2 = calc.calculate(html2);
-        
+
         let similarity = hash1.similarity(&hash2);
         assert!(similarity > 0.7, "Similar HTML should have high similarity");
     }

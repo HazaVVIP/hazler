@@ -392,7 +392,9 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
     // Check for Bearer Token
     if let Some(ref token) = args.auth_bearer {
         if auth_method.is_some() {
-            return Err("Multiple authentication methods specified. Please use only one.".to_string());
+            return Err(
+                "Multiple authentication methods specified. Please use only one.".to_string(),
+            );
         }
         auth_method = Some(AuthMethod::Bearer {
             token: token.clone(),
@@ -402,7 +404,9 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
     // Check for Cookie Auth
     if !args.auth_cookie.is_empty() {
         if auth_method.is_some() {
-            return Err("Multiple authentication methods specified. Please use only one.".to_string());
+            return Err(
+                "Multiple authentication methods specified. Please use only one.".to_string(),
+            );
         }
         let mut cookies = HashMap::new();
         for cookie in &args.auth_cookie {
@@ -418,7 +422,9 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
     // Check for Custom Header
     if let Some(ref header) = args.auth_header {
         if auth_method.is_some() {
-            return Err("Multiple authentication methods specified. Please use only one.".to_string());
+            return Err(
+                "Multiple authentication methods specified. Please use only one.".to_string(),
+            );
         }
         let parts: Vec<&str> = header.splitn(2, ':').collect();
         if parts.len() != 2 {
@@ -433,7 +439,9 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
     // Check for API Key
     if let Some(ref key) = args.auth_apikey {
         if auth_method.is_some() {
-            return Err("Multiple authentication methods specified. Please use only one.".to_string());
+            return Err(
+                "Multiple authentication methods specified. Please use only one.".to_string(),
+            );
         }
         let location = match args.auth_apikey_location.to_lowercase().as_str() {
             "header" => ApiKeyLocation::Header,
@@ -451,7 +459,9 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
     // Check for OAuth2
     if let Some(ref token) = args.auth_oauth {
         if auth_method.is_some() {
-            return Err("Multiple authentication methods specified. Please use only one.".to_string());
+            return Err(
+                "Multiple authentication methods specified. Please use only one.".to_string(),
+            );
         }
         auth_method = Some(AuthMethod::OAuth2 {
             access_token: token.clone(),
@@ -464,7 +474,9 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
     // Build form auth if provided
     let form_auth = if let Some(ref url) = args.auth_form_url {
         if args.auth_form_username.is_none() || args.auth_form_password.is_none() {
-            return Err("Form auth requires --auth-form-username and --auth-form-password".to_string());
+            return Err(
+                "Form auth requires --auth-form-username and --auth-form-password".to_string(),
+            );
         }
         Some(FormAuth {
             login_url: url.clone(),
@@ -487,7 +499,7 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
         }
         Ok(Some(config))
     } else if form_auth.is_some() {
-        return Err("Form auth URL specified but no authentication method provided".to_string());
+        Err("Form auth URL specified but no authentication method provided".to_string())
     } else {
         Ok(None)
     }
@@ -514,7 +526,7 @@ async fn main() {
         use std::io::{self, BufRead};
         let stdin = io::stdin();
         let mut urls = Vec::new();
-        
+
         for line in stdin.lock().lines() {
             match line {
                 Ok(url_str) => {
@@ -535,12 +547,12 @@ async fn main() {
                 }
             }
         }
-        
+
         if urls.is_empty() {
             error!("No valid URLs provided via stdin");
             process::exit(1);
         }
-        
+
         urls
     } else {
         // Normal mode: single URL from command line
@@ -596,7 +608,10 @@ async fn main() {
 
     // Display authentication info if configured
     if let Some(ref auth) = auth_config {
-        info!("Authentication enabled: {}", auth.method.sanitized_display());
+        info!(
+            "Authentication enabled: {}",
+            auth.method.sanitized_display()
+        );
     }
 
     // Configure the crawler
@@ -629,11 +644,11 @@ async fn main() {
     // Apply browser settings
     if args.browser {
         config = config.headless_browser(true);
-        
+
         if let Some(screenshot_path) = args.screenshot_path {
             config = config.screenshot_path(screenshot_path);
         }
-        
+
         if args.disable_images {
             config = config.disable_images(true);
         }
@@ -677,7 +692,7 @@ async fn main() {
         if urls.len() > 1 {
             info!("Crawling URL {}/{}: {}", idx + 1, urls.len(), start_url);
         }
-        
+
         match crawler.crawl(start_url.clone()).await {
             Ok(result) => {
                 // Merge results into combined result
@@ -685,7 +700,7 @@ async fn main() {
                 combined_result.total_pages += result.total_pages;
                 combined_result.total_urls += result.total_urls;
                 combined_result.errors.extend(result.errors);
-                
+
                 // Merge secret findings
                 if let Some(ref findings) = result.secret_findings {
                     if let Some(ref mut combined_findings) = combined_result.secret_findings {
@@ -712,16 +727,13 @@ async fn main() {
     // Apply fuzzing if enabled
     if args.fuzz || args.fuzz_params || args.fuzz_endpoints {
         // Extract unique URLs from crawled pages
-        let mut discovered_urls: Vec<Url> = result
-            .pages
-            .iter()
-            .map(|page| page.url.clone())
-            .collect();
-        
+        let mut discovered_urls: Vec<Url> =
+            result.pages.iter().map(|page| page.url.clone()).collect();
+
         // Remove duplicates
         discovered_urls.sort_by(|a, b| a.as_str().cmp(b.as_str()));
         discovered_urls.dedup();
-        
+
         // Apply fuzzing
         let fuzzed_urls = apply_fuzzing(
             &discovered_urls,
@@ -730,7 +742,7 @@ async fn main() {
             args.fuzz_endpoints,
             &args.fuzz_level,
         );
-        
+
         // Note: In a real implementation, you would crawl these fuzzed URLs
         // For now, we just report them
         if !fuzzed_urls.is_empty() {
@@ -742,7 +754,7 @@ async fn main() {
     // Handle baseline and comparison if requested
     if args.baseline.is_some() || args.compare.is_some() {
         use hazler_core::{DifferConfig, ResponseDiffer};
-        
+
         let diff_config = DifferConfig {
             similarity_threshold: args.diff_threshold,
             enable_noise_filtering: true,
@@ -755,14 +767,15 @@ async fn main() {
 
         // Save baseline mode
         if let Some(baseline_path) = &args.baseline {
-            let mut differ = ResponseDiffer::with_baseline(diff_config.clone(), baseline_path.clone());
-            
+            let mut differ =
+                ResponseDiffer::with_baseline(diff_config.clone(), baseline_path.clone());
+
             for page in &result.pages {
                 if let Err(e) = differ.save_baseline(page.url.as_str(), &page.body) {
                     error!("Failed to save baseline for {}: {}", page.url, e);
                 }
             }
-            
+
             if let Some(manager) = differ.baseline_manager_mut() {
                 if let Err(e) = manager.save() {
                     error!("Failed to save baseline file: {}", e);
@@ -779,8 +792,9 @@ async fn main() {
 
         // Compare mode
         if let Some(compare_path) = &args.compare {
-            let mut differ = ResponseDiffer::with_baseline(diff_config.clone(), compare_path.clone());
-            
+            let mut differ =
+                ResponseDiffer::with_baseline(diff_config.clone(), compare_path.clone());
+
             // Load baseline
             if let Some(manager) = differ.baseline_manager_mut() {
                 if let Err(e) = manager.load() {
@@ -797,9 +811,11 @@ async fn main() {
             let mut unchanged = 0;
 
             for page in &result.pages {
-                if let Some(similarity) = differ.compare_with_baseline(page.url.as_str(), &page.body) {
+                if let Some(similarity) =
+                    differ.compare_with_baseline(page.url.as_str(), &page.body)
+                {
                     let change_pct = (1.0 - similarity) * 100.0;
-                    
+
                     if similarity < diff_config.similarity_threshold {
                         changes_found += 1;
                         eprintln!(
@@ -833,18 +849,23 @@ async fn main() {
             eprintln!("Total responses: {}", result.pages.len());
             eprintln!("Changes detected: {}", changes_found);
             eprintln!("Unchanged: {}", unchanged);
-            eprintln!("Similarity threshold: {:.0}%", diff_config.similarity_threshold * 100.0);
+            eprintln!(
+                "Similarity threshold: {:.0}%",
+                diff_config.similarity_threshold * 100.0
+            );
         }
 
         // Clustering mode (if enabled)
         if args.cluster_responses {
-            use hazler_core::{SimHashCalculator, KMeansClusterer, DBSCANClusterer};
-            
+            use hazler_core::{DBSCANClusterer, KMeansClusterer, SimHashCalculator};
+
             eprintln!("\n{}", "Response Clustering".bright_cyan().bold());
             eprintln!("{}", "=".repeat(50));
 
             let calculator = SimHashCalculator::new();
-            let responses: Vec<(String, hazler_core::SimHash)> = result.pages.iter()
+            let responses: Vec<(String, hazler_core::SimHash)> = result
+                .pages
+                .iter()
                 .map(|page| (page.url.to_string(), calculator.calculate(&page.body)))
                 .collect();
 
@@ -864,7 +885,8 @@ async fn main() {
             };
 
             for cluster in &clusters {
-                eprintln!("\n{} Cluster {} ({} URLs, cohesion: {:.1}%)", 
+                eprintln!(
+                    "\n{} Cluster {} ({} URLs, cohesion: {:.1}%)",
                     "📊".bold(),
                     cluster.id,
                     cluster.urls.len(),
@@ -1010,128 +1032,128 @@ async fn main() {
 
     // Output results based on format
     match args.output_format.as_str() {
-                "json" => match formatter.format_json(&result) {
-                    Ok(json) => println!("{}", json),
-                    Err(e) => {
-                        error!("Failed to serialize results: {}", e);
-                        process::exit(1);
-                    }
-                },
-                "jsonl" => match formatter.format_jsonl(&result) {
-                    Ok(lines) => {
-                        for line in lines {
-                            println!("{}", line);
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to serialize results: {}", e);
-                        process::exit(1);
-                    }
-                },
-                "urls" => {
-                    println!("{}", formatter.format_urls(&result));
+        "json" => match formatter.format_json(&result) {
+            Ok(json) => println!("{}", json),
+            Err(e) => {
+                error!("Failed to serialize results: {}", e);
+                process::exit(1);
+            }
+        },
+        "jsonl" => match formatter.format_jsonl(&result) {
+            Ok(lines) => {
+                for line in lines {
+                    println!("{}", line);
                 }
-                "csv" => {
-                    println!("{}", formatter.format_csv(&result));
+            }
+            Err(e) => {
+                error!("Failed to serialize results: {}", e);
+                process::exit(1);
+            }
+        },
+        "urls" => {
+            println!("{}", formatter.format_urls(&result));
+        }
+        "csv" => {
+            println!("{}", formatter.format_csv(&result));
+        }
+        "tree" => {
+            println!("{}", formatter.format_tree(&result));
+        }
+        "nuclei" => match formatter.format_nuclei(&result) {
+            Ok(lines) => {
+                for line in lines {
+                    println!("{}", line);
                 }
-                "tree" => {
-                    println!("{}", formatter.format_tree(&result));
+            }
+            Err(e) => {
+                error!("Failed to serialize Nuclei results: {}", e);
+                process::exit(1);
+            }
+        },
+        "ffuf" => match formatter.format_ffuf(&result) {
+            Ok(lines) => {
+                for line in lines {
+                    println!("{}", line);
                 }
-                "nuclei" => match formatter.format_nuclei(&result) {
-                    Ok(lines) => {
-                        for line in lines {
-                            println!("{}", line);
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to serialize Nuclei results: {}", e);
-                        process::exit(1);
-                    }
-                },
-                "ffuf" => match formatter.format_ffuf(&result) {
-                    Ok(lines) => {
-                        for line in lines {
-                            println!("{}", line);
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to serialize ffuf results: {}", e);
-                        process::exit(1);
-                    }
-                },
-                "burp" => {
-                    println!("{}", formatter.format_burp(&result));
-                }
-                "openapi" => {
-                    println!("{}", format_openapi(&result));
-                }
-                "postman" => {
-                    println!("{}", format_postman(&result));
-                }
-                _ => {
-                    error!(
+            }
+            Err(e) => {
+                error!("Failed to serialize ffuf results: {}", e);
+                process::exit(1);
+            }
+        },
+        "burp" => {
+            println!("{}", formatter.format_burp(&result));
+        }
+        "openapi" => {
+            println!("{}", format_openapi(&result));
+        }
+        "postman" => {
+            println!("{}", format_postman(&result));
+        }
+        _ => {
+            error!(
                         "Unknown output format: {}. Valid formats: json, jsonl, urls, csv, tree, nuclei, ffuf, burp, openapi, postman",
                         args.output_format
                     );
-                    process::exit(1);
-                }
-            }
-
-            // Print summary to stderr (unless --stats or --report was used)
-            if !args.stats && !args.report {
-                eprintln!("\n{}", "═".repeat(80).bright_blue());
-                eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
-                eprintln!("{}", "═".repeat(80).bright_blue());
-                eprintln!(
-                    "{} {}",
-                    "Total pages crawled:".bright_white(),
-                    result.total_pages.to_string().green().bold()
-                );
-                eprintln!(
-                    "{} {}",
-                    "Total URLs discovered:".bright_white(),
-                    result.total_urls.to_string().cyan().bold()
-                );
-                eprintln!(
-                    "{} {}",
-                    "Errors encountered:".bright_white(),
-                    if !result.errors.is_empty() {
-                        result.errors.len().to_string().red().bold()
-                    } else {
-                        result.errors.len().to_string().green().bold()
-                    }
-                );
-
-                // Show secrets summary if any found
-                if let Some(ref stats) = result.secret_findings {
-                    if stats.total > 0 {
-                        eprintln!(
-                            "\n{} {}",
-                            "🔒 Secrets found:".bright_red().bold(),
-                            stats.total.to_string().bright_red().bold()
-                        );
-                        if stats.critical > 0 {
-                            eprintln!("  {} {}", "Critical:".red(), stats.critical);
-                        }
-                        if stats.high > 0 {
-                            eprintln!("  {} {}", "High:".yellow(), stats.high);
-                        }
-                        if stats.medium > 0 {
-                            eprintln!("  {} {}", "Medium:".yellow(), stats.medium);
-                        }
-                        if stats.low > 0 {
-                            eprintln!("  {} {}", "Low:".cyan(), stats.low);
-                        }
-                    }
-                }
-
-                if !result.errors.is_empty() && args.verbose {
-                    eprintln!("\n{}", "⚠️  ERRORS".yellow().bold());
-                    for error in &result.errors {
-                        eprintln!("  {} {}", "•".red(), error);
-                    }
-                }
-
-                eprintln!("{}\n", "═".repeat(80).bright_blue());
-            }
+            process::exit(1);
+        }
     }
+
+    // Print summary to stderr (unless --stats or --report was used)
+    if !args.stats && !args.report {
+        eprintln!("\n{}", "═".repeat(80).bright_blue());
+        eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
+        eprintln!("{}", "═".repeat(80).bright_blue());
+        eprintln!(
+            "{} {}",
+            "Total pages crawled:".bright_white(),
+            result.total_pages.to_string().green().bold()
+        );
+        eprintln!(
+            "{} {}",
+            "Total URLs discovered:".bright_white(),
+            result.total_urls.to_string().cyan().bold()
+        );
+        eprintln!(
+            "{} {}",
+            "Errors encountered:".bright_white(),
+            if !result.errors.is_empty() {
+                result.errors.len().to_string().red().bold()
+            } else {
+                result.errors.len().to_string().green().bold()
+            }
+        );
+
+        // Show secrets summary if any found
+        if let Some(ref stats) = result.secret_findings {
+            if stats.total > 0 {
+                eprintln!(
+                    "\n{} {}",
+                    "🔒 Secrets found:".bright_red().bold(),
+                    stats.total.to_string().bright_red().bold()
+                );
+                if stats.critical > 0 {
+                    eprintln!("  {} {}", "Critical:".red(), stats.critical);
+                }
+                if stats.high > 0 {
+                    eprintln!("  {} {}", "High:".yellow(), stats.high);
+                }
+                if stats.medium > 0 {
+                    eprintln!("  {} {}", "Medium:".yellow(), stats.medium);
+                }
+                if stats.low > 0 {
+                    eprintln!("  {} {}", "Low:".cyan(), stats.low);
+                }
+            }
+        }
+
+        if !result.errors.is_empty() && args.verbose {
+            eprintln!("\n{}", "⚠️  ERRORS".yellow().bold());
+            for error in &result.errors {
+                eprintln!("  {} {}", "•".red(), error);
+            }
+        }
+
+        eprintln!("{}\n", "═".repeat(80).bright_blue());
+    }
+}

@@ -2,8 +2,8 @@
 //!
 //! This module detects and categorizes changes between response versions.
 
-use serde::{Deserialize, Serialize};
 use crate::differ::simhash::SimHash;
+use serde::{Deserialize, Serialize};
 
 /// Type of change detected
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,8 +68,10 @@ impl ChangeDetector {
         let size_after = after.len();
         let size_diff = size_after as i64 - size_before as i64;
 
-        let change_type = self.determine_change_type(similarity, size_diff, size_before, size_after);
-        let is_significant = self.is_change_significant(similarity, size_diff.abs() as usize);
+        let change_type =
+            self.determine_change_type(similarity, size_diff, size_before, size_after);
+        let is_significant =
+            self.is_change_significant(similarity, size_diff.unsigned_abs() as usize);
         let description = self.generate_description(&change_type, similarity, size_diff);
 
         ResponseChange {
@@ -107,7 +109,7 @@ impl ChangeDetector {
         }
 
         let size_change_ratio = size_diff.abs() as f64 / size_before.max(1) as f64;
-        
+
         if size_change_ratio > 0.3 {
             if size_diff > 0 {
                 ChangeType::Addition
@@ -126,21 +128,31 @@ impl ChangeDetector {
     }
 
     /// Generate a human-readable description of the change
-    fn generate_description(&self, change_type: &ChangeType, similarity: f64, size_diff: i64) -> String {
+    fn generate_description(
+        &self,
+        change_type: &ChangeType,
+        similarity: f64,
+        size_diff: i64,
+    ) -> String {
         match change_type {
             ChangeType::None => {
-                format!("No significant change (similarity: {:.1}%)", similarity * 100.0)
+                format!(
+                    "No significant change (similarity: {:.1}%)",
+                    similarity * 100.0
+                )
             }
             ChangeType::Addition => {
                 format!(
                     "Content added (+{} bytes, similarity: {:.1}%)",
-                    size_diff, similarity * 100.0
+                    size_diff,
+                    similarity * 100.0
                 )
             }
             ChangeType::Deletion => {
                 format!(
                     "Content removed ({} bytes, similarity: {:.1}%)",
-                    size_diff, similarity * 100.0
+                    size_diff,
+                    similarity * 100.0
                 )
             }
             ChangeType::Modification => {
@@ -209,18 +221,28 @@ mod tests {
     fn test_addition() {
         let detector = ChangeDetector::default();
         let calculator = SimHashCalculator::new();
-        
+
         let before = "Hello";
         let after = "Hello World with lots more content added here for testing purposes";
         let hash_before = calculator.calculate(before);
         let hash_after = calculator.calculate(after);
 
-        let change = detector.detect_change("http://example.com", before, after, &hash_before, &hash_after);
+        let change = detector.detect_change(
+            "http://example.com",
+            before,
+            after,
+            &hash_before,
+            &hash_after,
+        );
         // Should detect addition or structural change
-        assert!(matches!(
-            change.change_type,
-            ChangeType::Addition | ChangeType::Modification | ChangeType::Structural
-        ), "Change type should be Addition, Modification, or Structural but got {:?}", change.change_type);
+        assert!(
+            matches!(
+                change.change_type,
+                ChangeType::Addition | ChangeType::Modification | ChangeType::Structural
+            ),
+            "Change type should be Addition, Modification, or Structural but got {:?}",
+            change.change_type
+        );
         assert!(change.size_diff > 0);
     }
 
@@ -228,14 +250,23 @@ mod tests {
     fn test_deletion() {
         let detector = ChangeDetector::default();
         let calculator = SimHashCalculator::new();
-        
+
         let before = "Hello World with lots of content to remove";
         let after = "Hello";
         let hash_before = calculator.calculate(before);
         let hash_after = calculator.calculate(after);
 
-        let change = detector.detect_change("http://example.com", before, after, &hash_before, &hash_after);
-        assert!(matches!(change.change_type, ChangeType::Deletion | ChangeType::Modification));
+        let change = detector.detect_change(
+            "http://example.com",
+            before,
+            after,
+            &hash_before,
+            &hash_after,
+        );
+        assert!(matches!(
+            change.change_type,
+            ChangeType::Deletion | ChangeType::Modification
+        ));
         assert!(change.size_diff < 0);
     }
 
@@ -243,13 +274,19 @@ mod tests {
     fn test_modification() {
         let detector = ChangeDetector::default();
         let calculator = SimHashCalculator::new();
-        
+
         let before = "Hello World";
         let after = "Hello Universe";
         let hash_before = calculator.calculate(before);
         let hash_after = calculator.calculate(after);
 
-        let change = detector.detect_change("http://example.com", before, after, &hash_before, &hash_after);
+        let change = detector.detect_change(
+            "http://example.com",
+            before,
+            after,
+            &hash_before,
+            &hash_after,
+        );
         assert!(matches!(
             change.change_type,
             ChangeType::Modification | ChangeType::None
@@ -260,15 +297,21 @@ mod tests {
     fn test_structural_change() {
         let detector = ChangeDetector::default();
         let calculator = SimHashCalculator::new();
-        
+
         let before = "Apple Banana Cherry Date";
         let after = "Zebra Yak Xerus Walrus";
         let hash_before = calculator.calculate(before);
         let hash_after = calculator.calculate(after);
 
-        let change = detector.detect_change("http://example.com", before, after, &hash_before, &hash_after);
+        let change = detector.detect_change(
+            "http://example.com",
+            before,
+            after,
+            &hash_before,
+            &hash_after,
+        );
         let similarity = hash_before.similarity(&hash_after);
-        
+
         // Structural change if very different
         if similarity < 0.7 {
             assert_eq!(change.change_type, ChangeType::Structural);
@@ -279,13 +322,19 @@ mod tests {
     fn test_significant_change() {
         let detector = ChangeDetector::new(0.1, 50);
         let calculator = SimHashCalculator::new();
-        
+
         let before = "Original content";
         let after = "Completely different content with many more words and characters";
         let hash_before = calculator.calculate(before);
         let hash_after = calculator.calculate(after);
 
-        let change = detector.detect_change("http://example.com", before, after, &hash_before, &hash_after);
+        let change = detector.detect_change(
+            "http://example.com",
+            before,
+            after,
+            &hash_before,
+            &hash_after,
+        );
         assert!(change.is_significant);
     }
 
@@ -320,7 +369,7 @@ mod tests {
     fn test_description_generation() {
         let detector = ChangeDetector::default();
         let calculator = SimHashCalculator::new();
-        
+
         let before = "test";
         let after = "test";
         let hash = calculator.calculate(before);

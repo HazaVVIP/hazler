@@ -1,6 +1,5 @@
 /// Smart retry logic with exponential backoff
 /// Implements retry mechanism for failed HTTP requests with circuit breaker
-
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{debug, warn};
@@ -67,9 +66,8 @@ impl RetryConfig {
 
     /// Calculate delay for a given attempt number
     pub fn calculate_delay(&self, attempt: u32) -> Duration {
-        let base_delay = (self.initial_delay_ms as f64
-            * self.backoff_multiplier.powi(attempt as i32))
-            as u64;
+        let base_delay =
+            (self.initial_delay_ms as f64 * self.backoff_multiplier.powi(attempt as i32)) as u64;
 
         let capped_delay = base_delay.min(self.max_delay_ms);
 
@@ -156,7 +154,7 @@ pub fn is_retryable_status(status_code: u16) -> bool {
         500 | // Internal Server Error
         502 | // Bad Gateway
         503 | // Service Unavailable
-        504   // Gateway Timeout
+        504 // Gateway Timeout
     )
 }
 

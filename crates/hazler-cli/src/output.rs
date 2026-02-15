@@ -338,11 +338,11 @@ impl OutputFormatter {
             let port = page.url.port_or_known_default().unwrap_or(80);
             let protocol = page.url.scheme();
             let path = page.url.path();
-            
+
             // Determine extension from path
             let extension = path
                 .split('/')
-                .last()
+                .next_back()
                 .and_then(|f| f.rsplit_once('.'))
                 .map(|(_, ext)| ext)
                 .unwrap_or("null");
@@ -358,17 +358,17 @@ impl OutputFormatter {
             let mimetype = page
                 .content_type
                 .as_deref()
-                .and_then(|ct| {
+                .map(|ct| {
                     if ct.contains("html") {
-                        Some("HTML")
+                        "HTML"
                     } else if ct.contains("json") {
-                        Some("JSON")
+                        "JSON"
                     } else if ct.contains("xml") {
-                        Some("XML")
+                        "XML"
                     } else if ct.contains("javascript") {
-                        Some("script")
+                        "script"
                     } else {
-                        Some("other")
+                        "other"
                     }
                 })
                 .unwrap_or("other");
@@ -378,27 +378,42 @@ impl OutputFormatter {
 
             xml.push_str("  <item>\n");
             xml.push_str(&format!("    <time>{}</time>\n", time));
-            xml.push_str(&format!("    <url>{}</url>\n", Self::escape_xml(page.url.as_str())));
+            xml.push_str(&format!(
+                "    <url>{}</url>\n",
+                Self::escape_xml(page.url.as_str())
+            ));
             xml.push_str(&format!("    <host>{}</host>\n", Self::escape_xml(host)));
             xml.push_str(&format!("    <port>{}</port>\n", port));
             xml.push_str(&format!("    <protocol>{}</protocol>\n", protocol));
-            xml.push_str(&format!("    <method>GET</method>\n"));
+            xml.push_str("    <method>GET</method>\n");
             xml.push_str(&format!("    <path>{}</path>\n", Self::escape_xml(path)));
             xml.push_str(&format!("    <extension>{}</extension>\n", extension));
-            xml.push_str(&format!("    <request base64=\"true\">{}</request>\n", request_b64));
+            xml.push_str(&format!(
+                "    <request base64=\"true\">{}</request>\n",
+                request_b64
+            ));
             xml.push_str(&format!("    <status>{}</status>\n", page.status_code));
-            xml.push_str(&format!("    <responselength>{}</responselength>\n", page.body.len()));
+            xml.push_str(&format!(
+                "    <responselength>{}</responselength>\n",
+                page.body.len()
+            ));
             xml.push_str(&format!("    <mimetype>{}</mimetype>\n", mimetype));
-            xml.push_str(&format!("    <response base64=\"true\">{}</response>\n", response_b64));
-            
+            xml.push_str(&format!(
+                "    <response base64=\"true\">{}</response>\n",
+                response_b64
+            ));
+
             // Add comment with secret findings if any
             let comment = if !page.secrets.is_empty() {
                 format!("Hazler: {} secrets detected", page.secrets.len())
             } else {
                 String::new()
             };
-            xml.push_str(&format!("    <comment>{}</comment>\n", Self::escape_xml(&comment)));
-            
+            xml.push_str(&format!(
+                "    <comment>{}</comment>\n",
+                Self::escape_xml(&comment)
+            ));
+
             xml.push_str("  </item>\n");
         }
 

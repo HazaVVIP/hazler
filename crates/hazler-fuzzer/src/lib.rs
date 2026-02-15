@@ -1,7 +1,7 @@
 //! # Hazler Fuzzer
 //!
 //! Smart fuzzing module for Hazler web crawler.
-//! 
+//!
 //! This crate provides intelligent fuzzing capabilities including:
 //! - URL mutation engine (pluralization, extensions, versioning)
 //! - Parameter discovery with common parameter wordlists
@@ -31,10 +31,10 @@
 //!
 //! let config = FuzzerConfig::default();
 //! let mutator = UrlMutator::new(config);
-//! 
+//!
 //! let url = Url::parse("https://api.example.com/user").unwrap();
 //! let mutations = mutator.generate_mutations(&url);
-//! 
+//!
 //! for mutation in mutations {
 //!     println!("Testing: {:?}", mutation.url);
 //! }

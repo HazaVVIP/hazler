@@ -1,6 +1,5 @@
 /// State persistence for save/resume functionality
 /// Supports JSON and SQLite backends for crawl state storage
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::{self, File};

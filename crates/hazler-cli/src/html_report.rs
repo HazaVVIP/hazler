@@ -44,7 +44,8 @@ fn build_html_report(result: &CrawlResult) -> String {
     }
 
     // Calculate status code distribution for charts
-    let mut status_groups: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    let mut status_groups: std::collections::HashMap<&str, usize> =
+        std::collections::HashMap::new();
     for page in &result.pages {
         let group = match page.status_code {
             200..=299 => "2xx Success",
@@ -55,24 +56,31 @@ fn build_html_report(result: &CrawlResult) -> String {
         };
         *status_groups.entry(group).or_insert(0) += 1;
     }
-    
+
     let status_labels: Vec<_> = status_groups.keys().collect();
     let status_values: Vec<_> = status_labels.iter().map(|k| status_groups[*k]).collect();
-    let status_labels_json = serde_json::to_string(&status_labels).unwrap_or_else(|_| "[]".to_string());
-    let status_values_json = serde_json::to_string(&status_values).unwrap_or_else(|_| "[]".to_string());
-    
+    let status_labels_json =
+        serde_json::to_string(&status_labels).unwrap_or_else(|_| "[]".to_string());
+    let status_values_json =
+        serde_json::to_string(&status_values).unwrap_or_else(|_| "[]".to_string());
+
     // Calculate depth distribution for charts
     let mut depth_map: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
     for page in &result.pages {
         *depth_map.entry(page.depth).or_insert(0) += 1;
     }
-    
+
     let mut depth_list: Vec<_> = depth_map.iter().collect();
     depth_list.sort_by_key(|(depth, _)| *depth);
-    let depth_labels: Vec<_> = depth_list.iter().map(|(d, _)| format!("Depth {}", d)).collect();
+    let depth_labels: Vec<_> = depth_list
+        .iter()
+        .map(|(d, _)| format!("Depth {}", d))
+        .collect();
     let depth_values: Vec<_> = depth_list.iter().map(|(_, count)| *count).collect();
-    let depth_labels_json = serde_json::to_string(&depth_labels).unwrap_or_else(|_| "[]".to_string());
-    let depth_values_json = serde_json::to_string(&depth_values).unwrap_or_else(|_| "[]".to_string());
+    let depth_labels_json =
+        serde_json::to_string(&depth_labels).unwrap_or_else(|_| "[]".to_string());
+    let depth_values_json =
+        serde_json::to_string(&depth_values).unwrap_or_else(|_| "[]".to_string());
 
     format!(
         r#"<!DOCTYPE html>

@@ -13,28 +13,30 @@
 //!
 //! ## Example
 //!
-//! ```no_run
+//! ```
 //! use hazler_core::differ::{ResponseDiffer, DifferConfig};
 //!
 //! let config = DifferConfig::default();
 //! let differ = ResponseDiffer::new(config);
 //!
 //! // Compare two responses
-//! let similarity = differ.compare_responses(&response1, &response2);
+//! let response1 = "<html><body>Hello World</body></html>";
+//! let response2 = "<html><body>Hello World!</body></html>";
+//! let similarity = differ.compare_responses(response1, response2);
 //! println!("Similarity: {:.2}%", similarity * 100.0);
 //! ```
 
-mod simhash;
-mod clustering;
-mod noise_filter;
 mod baseline;
 mod change_detection;
+mod clustering;
+mod noise_filter;
+mod simhash;
 
+pub use baseline::{BaselineManager, BaselineStorage};
+pub use change_detection::{ChangeDetector, ChangeType, ResponseChange};
+pub use clustering::{ClusteringAlgorithm, DBSCANClusterer, KMeansClusterer, ResponseCluster};
+pub use noise_filter::{NormalizedResponse, ResponseNormalizer};
 pub use simhash::{SimHash, SimHashCalculator};
-pub use clustering::{ResponseCluster, ClusteringAlgorithm, KMeansClusterer, DBSCANClusterer};
-pub use noise_filter::{ResponseNormalizer, NormalizedResponse};
-pub use baseline::{BaselineStorage, BaselineManager};
-pub use change_detection::{ChangeDetector, ResponseChange, ChangeType};
 
 use serde::{Deserialize, Serialize};
 

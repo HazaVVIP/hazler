@@ -2,6 +2,10 @@
 
 set -e
 
+# Hazler Installation Script
+# Version: 0.2.0
+# Supports: Linux, macOS, Windows (WSL)
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -9,32 +13,90 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Configuration
+SILENT_MODE=false
+SKIP_DEPS=false
+VERSION="${HAZLER_VERSION:-latest}"
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --silent|-s)
+            SILENT_MODE=true
+            shift
+            ;;
+        --skip-deps)
+            SKIP_DEPS=true
+            shift
+            ;;
+        --version)
+            VERSION="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Hazler Installation Script"
+            echo ""
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --silent, -s       Silent mode (non-interactive)"
+            echo "  --skip-deps        Skip dependency installation"
+            echo "  --version VERSION  Install specific version"
+            echo "  --help, -h         Show this help message"
+            echo ""
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 # Print colored message
 print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    if [ "$SILENT_MODE" = false ]; then
+        echo -e "${BLUE}[INFO]${NC} $1"
+    fi
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    if [ "$SILENT_MODE" = false ]; then
+        echo -e "${GREEN}[SUCCESS]${NC} $1"
+    fi
 }
 
 print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    if [ "$SILENT_MODE" = false ]; then
+        echo -e "${YELLOW}[WARNING]${NC} $1"
+    fi
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
-# Detect OS
-detect_os() {
+# Detect OS and architecture
+detect_platform() {
+    local os=""
+    local arch=""
+    
     case "$(uname -s)" in
-        Linux*)     OS=linux;;
-        Darwin*)    OS=macos;;
-        MINGW*|MSYS*|CYGWIN*)    OS=windows;;
-        *)          OS=unknown;;
+        Linux*)     os=linux;;
+        Darwin*)    os=macos;;
+        MINGW*|MSYS*|CYGWIN*)    os=windows;;
+        *)          os=unknown;;
     esac
-    echo "$OS"
+    
+    case "$(uname -m)" in
+        x86_64|amd64)  arch=x86_64;;
+        aarch64|arm64) arch=aarch64;;
+        armv7l)        arch=armv7;;
+        *)             arch=unknown;;
+    esac
+    
+    echo "${os}-${arch}"
 }
 
 # Check if command exists
@@ -44,9 +106,16 @@ command_exists() {
 
 # Install system dependencies
 install_dependencies() {
-    local os=$1
+    if [ "$SKIP_DEPS" = true ]; then
+        print_info "Skipping dependency installation (--skip-deps)"
+        return 0
+    fi
     
-    print_info "Installing system dependencies for $os..."
+    local platform=$1
+    local os=$(echo "$platform" | cut -d'-' -f1)
+    local arch=$(echo "$platform" | cut -d'-' -f2)
+    
+    print_info "Installing system dependencies for $os ($arch)..."
     
     case "$os" in
         linux)
@@ -219,37 +288,49 @@ verify_installation() {
 
 # Main installation flow
 main() {
-    echo ""
-    print_info "================================"
-    print_info "  Hazler Installation Script"
-    print_info "================================"
-    echo ""
+    if [ "$SILENT_MODE" = false ]; then
+        echo ""
+        print_info "================================"
+        print_info "  Hazler Installation Script"
+        print_info "  Version: 0.2.0"
+        print_info "================================"
+        echo ""
+    fi
     
-    # Detect OS
-    OS=$(detect_os)
-    print_info "Detected operating system: $OS"
-    echo ""
+    # Detect platform
+    PLATFORM=$(detect_platform)
+    OS=$(echo "$PLATFORM" | cut -d'-' -f1)
+    print_info "Detected platform: $PLATFORM"
+    if [ "$SILENT_MODE" = false ]; then
+        echo ""
+    fi
     
     # Install dependencies
-    if ! install_dependencies "$OS"; then
+    if ! install_dependencies "$PLATFORM"; then
         print_error "Failed to install dependencies"
         exit 1
     fi
-    echo ""
+    if [ "$SILENT_MODE" = false ]; then
+        echo ""
+    fi
     
     # Check/install Rust
     if ! check_rust; then
         print_error "Failed to set up Rust"
         exit 1
     fi
-    echo ""
+    if [ "$SILENT_MODE" = false ]; then
+        echo ""
+    fi
     
     # Install Hazler
     if ! install_hazler; then
         print_error "Failed to install Hazler"
         exit 1
     fi
-    echo ""
+    if [ "$SILENT_MODE" = false ]; then
+        echo ""
+    fi
     
     # Verify installation
     if ! verify_installation; then
@@ -257,15 +338,19 @@ main() {
         exit 1
     fi
     
-    echo ""
-    print_success "================================"
-    print_success "  Installation Complete! 🎉"
-    print_success "================================"
-    echo ""
-    print_info "Quick start:"
-    print_info "  hazler --help"
-    print_info "  hazler https://example.com"
-    echo ""
+    if [ "$SILENT_MODE" = false ]; then
+        echo ""
+        print_success "================================"
+        print_success "  Installation Complete! 🎉"
+        print_success "================================"
+        echo ""
+        print_info "Quick start:"
+        print_info "  hazler --help"
+        print_info "  hazler https://example.com"
+        echo ""
+    else
+        print_success "Hazler installed successfully"
+    fi
 }
 
 # Run main installation

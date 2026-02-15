@@ -1,7 +1,7 @@
 use crate::auth::{ApiKeyLocation, AuthConfig, AuthMethod, FormAuth};
 use crate::error::{Error, Result};
-use crate::user_agents::{UserAgentDatabase, generate_chrome_client_hints};
-use reqwest::{Client, header};
+use crate::user_agents::{generate_chrome_client_hints, UserAgentDatabase};
+use reqwest::{header, Client};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,6 +30,14 @@ impl HttpClient {
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::limited(10))
             .cookie_store(true) // Enable cookie jar for session management
+            // Performance optimizations
+            .http2_prior_knowledge() // Enable HTTP/2 by default
+            .pool_max_idle_per_host(10) // Connection pooling: keep 10 idle connections per host
+            .pool_idle_timeout(Duration::from_secs(90)) // Keep connections alive for 90s
+            .tcp_keepalive(Duration::from_secs(60)) // TCP keepalive to maintain connections
+            .gzip(true) // Enable gzip compression
+            .brotli(true) // Enable brotli compression
+            .deflate(true) // Enable deflate compression
             .build()
             .map_err(Error::RequestFailed)?;
 
@@ -42,13 +50,13 @@ impl HttpClient {
             auth_config: None,
         })
     }
-    
+
     /// Enable User-Agent rotation for WAF evasion
     pub fn with_user_agent_rotation(mut self, enable: bool) -> Self {
         self.rotate_user_agent = enable;
         self
     }
-    
+
     /// Enable Chrome client hints for better fingerprinting
     pub fn with_chrome_hints(mut self, enable: bool) -> Self {
         self.add_chrome_hints = enable;
@@ -74,7 +82,7 @@ impl HttpClient {
     fn apply_auth(
         &self,
         mut request: reqwest::RequestBuilder,
-        url: &Url,
+        _url: &Url,
         auth_method: &AuthMethod,
     ) -> Result<reqwest::RequestBuilder> {
         match auth_method {
@@ -148,19 +156,13 @@ impl HttpClient {
     pub async fn form_login(&self, form_auth: &FormAuth) -> Result<()> {
         debug!("Performing form-based login to: {}", form_auth.login_url);
 
-        let login_url = Url::parse(&form_auth.login_url)
-            .map_err(|e| Error::InvalidUrl(e.to_string()))?;
+        let login_url =
+            Url::parse(&form_auth.login_url).map_err(|e| Error::InvalidUrl(e.to_string()))?;
 
         // Build form data
         let mut form_data = HashMap::new();
-        form_data.insert(
-            form_auth.username_field.clone(),
-            form_auth.username.clone(),
-        );
-        form_data.insert(
-            form_auth.password_field.clone(),
-            form_auth.password.clone(),
-        );
+        form_data.insert(form_auth.username_field.clone(), form_auth.username.clone());
+        form_data.insert(form_auth.password_field.clone(), form_auth.password.clone());
 
         // Add extra fields (e.g., CSRF tokens)
         for (key, value) in &form_auth.extra_fields {
@@ -197,7 +199,7 @@ impl HttpClient {
         // Pre-process URL for API key in query parameter if needed
         let mut final_url = url.clone();
         let mut skip_api_key_in_auth = false;
-        
+
         if let Some(auth_config) = &self.auth_config {
             if let AuthMethod::ApiKey {
                 key,
@@ -213,13 +215,13 @@ impl HttpClient {
 
         // Build request with optional User-Agent rotation and Chrome hints
         let mut request = self.client.get(final_url.as_str());
-        
+
         // Apply User-Agent rotation if enabled
         if self.rotate_user_agent {
             let user_agent = self.user_agent_db.get_random();
             request = request.header(header::USER_AGENT, user_agent);
             debug!("Using rotated User-Agent: {}", user_agent);
-            
+
             // Add Chrome client hints if enabled and UA is Chrome
             if self.add_chrome_hints {
                 if let Some(hints) = generate_chrome_client_hints(user_agent) {
@@ -230,14 +232,14 @@ impl HttpClient {
                 }
             }
         }
-        
+
         // Apply authentication if configured (skip query-based API key as already handled)
         if let Some(auth_config) = &self.auth_config {
             if !skip_api_key_in_auth {
                 request = self.apply_auth(request, url, &auth_config.method)?;
             }
         }
-        
+
         let response = request.send().await.map_err(|e| {
             warn!("Failed to fetch {}: {}", url, e);
             Error::RequestFailed(e)

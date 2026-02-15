@@ -1,10 +1,12 @@
 /// Graceful shutdown handler for Ctrl+C and signal handling
 /// Ensures state is saved and resources are cleaned up
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::signal;
 use tracing::{info, warn};
+
+/// Type alias for cleanup callback functions
+type CleanupCallback = Box<dyn FnOnce() + Send>;
 
 /// Shutdown signal handler
 #[derive(Clone)]
@@ -63,7 +65,7 @@ impl Default for ShutdownHandler {
 /// Graceful shutdown coordinator
 pub struct GracefulShutdown {
     handler: ShutdownHandler,
-    cleanup_callbacks: Arc<std::sync::Mutex<Vec<Box<dyn FnOnce() + Send>>>>,
+    cleanup_callbacks: Arc<std::sync::Mutex<Vec<CleanupCallback>>>,
 }
 
 impl GracefulShutdown {

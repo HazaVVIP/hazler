@@ -1,6 +1,5 @@
 /// Per-domain rate limiting using token bucket algorithm
 /// Implements adaptive rate limiting based on server responses
-
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -229,9 +228,7 @@ impl RateLimiter {
                     domain, current_rate, new_rate
                 );
 
-                limiter
-                    .bucket
-                    .adjust(new_rate * 2.0, new_rate);
+                limiter.bucket.adjust(new_rate * 2.0, new_rate);
                 limiter.consecutive_429s = 0;
                 limiter.last_adjustment = Instant::now();
             }
@@ -262,9 +259,7 @@ impl RateLimiter {
                         domain, current_rate, new_rate
                     );
 
-                    limiter
-                        .bucket
-                        .adjust(new_rate * 2.0, new_rate);
+                    limiter.bucket.adjust(new_rate * 2.0, new_rate);
                     limiter.consecutive_success = 0;
                     limiter.last_adjustment = Instant::now();
                 }
@@ -306,14 +301,14 @@ mod tests {
     #[tokio::test]
     async fn test_token_bucket_refill() {
         let mut bucket = TokenBucket::new(10.0, 10.0); // 10 tokens per second
-        
+
         // Consume all tokens
         assert!(bucket.try_consume(10.0));
         assert_eq!(bucket.tokens, 0.0);
 
         // Wait for refill
         tokio::time::sleep(Duration::from_millis(500)).await;
-        
+
         // Should have refilled approximately 5 tokens
         bucket.refill();
         assert!(bucket.tokens >= 4.5 && bucket.tokens <= 5.5);
@@ -393,7 +388,8 @@ mod tests {
         {
             let mut limiters = limiter.limiters.lock().unwrap();
             if let Some(domain_limiter) = limiters.get_mut("example.com") {
-                domain_limiter.last_adjustment = std::time::Instant::now() - std::time::Duration::from_secs(20);
+                domain_limiter.last_adjustment =
+                    std::time::Instant::now() - std::time::Duration::from_secs(20);
             }
         }
 
@@ -420,7 +416,7 @@ mod tests {
     #[test]
     fn test_time_until_available() {
         let bucket = TokenBucket::new(10.0, 5.0);
-        
+
         // With full tokens, should be immediate
         let duration = bucket.time_until_available(5.0);
         assert_eq!(duration, Duration::ZERO);

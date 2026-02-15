@@ -23,20 +23,20 @@ impl Browser {
         info!("Launching headless browser...");
 
         let mut chrome_config = ChromeConfig::builder();
-        
+
         // Set headless mode (default is headless, with_head() makes it non-headless)
         if !config.headless {
             chrome_config = chrome_config.with_head();
         }
-        
+
         // Set window size
         chrome_config = chrome_config.window_size(config.window_width, config.window_height);
-        
+
         // Set user agent if provided
         if let Some(ref user_agent) = config.user_agent {
             chrome_config = chrome_config.arg(format!("--user-agent={}", user_agent));
         }
-        
+
         // Additional Chrome flags for stealth and performance
         chrome_config = chrome_config
             .arg("--disable-blink-features=AutomationControlled")
@@ -44,7 +44,7 @@ impl Browser {
             .arg("--no-sandbox")
             .arg("--disable-setuid-sandbox")
             .arg("--disable-gpu");
-        
+
         // Disable images if configured
         if config.disable_images {
             chrome_config = chrome_config.arg("--blink-settings=imagesEnabled=false");
@@ -69,10 +69,7 @@ impl Browser {
 
         info!("Browser launched successfully");
 
-        Ok(Self {
-            chrome,
-            config,
-        })
+        Ok(Self { chrome, config })
     }
 
     /// Load a page and capture all network activity
@@ -80,31 +77,36 @@ impl Browser {
         info!("Loading page with headless browser: {}", url);
 
         // Create a new page
-        let page = self
-            .chrome
-            .new_page(url.as_str())
-            .await
-            .map_err(|e| BrowserError::PageCreationError(format!("Failed to create page: {}", e)))?;
+        let page = self.chrome.new_page(url.as_str()).await.map_err(|e| {
+            BrowserError::PageCreationError(format!("Failed to create page: {}", e))
+        })?;
 
         // Enable network domain to capture network events
         page.execute(chromiumoxide::cdp::browser_protocol::network::EnableParams::default())
             .await
-            .map_err(|e| BrowserError::InterceptionError(format!("Failed to enable network: {}", e)))?;
+            .map_err(|e| {
+                BrowserError::InterceptionError(format!("Failed to enable network: {}", e))
+            })?;
 
         // Storage for captured network requests
         let network_requests = Arc::new(Mutex::new(Vec::new()));
         let network_requests_clone = network_requests.clone();
 
         // Set up network request listener
-        let mut request_events = page.event_listener::<EventRequestWillBeSent>()
+        let mut request_events = page
+            .event_listener::<EventRequestWillBeSent>()
             .await
-            .map_err(|e| BrowserError::InterceptionError(format!("Failed to create event listener: {}", e)))?;
+            .map_err(|e| {
+                BrowserError::InterceptionError(format!("Failed to create event listener: {}", e))
+            })?;
 
         // Spawn task to capture network requests
         tokio::spawn(async move {
             while let Some(event) = request_events.next().await {
                 let request = &event.request;
-                let resource_type = event.r#type.as_ref()
+                let resource_type = event
+                    .r#type
+                    .as_ref()
                     .map(|t| format!("{:?}", t))
                     .unwrap_or_else(|| "Unknown".to_string());
 
@@ -112,7 +114,9 @@ impl Browser {
                 // Serialize Headers to JSON and then parse as HashMap
                 let mut headers: HashMap<String, String> = HashMap::new();
                 if let Ok(headers_json) = serde_json::to_value(&request.headers) {
-                    if let Ok(headers_map) = serde_json::from_value::<HashMap<String, serde_json::Value>>(headers_json) {
+                    if let Ok(headers_map) =
+                        serde_json::from_value::<HashMap<String, serde_json::Value>>(headers_json)
+                    {
                         for (k, v) in headers_map {
                             let value_str = match v {
                                 serde_json::Value::String(s) => s,
@@ -125,7 +129,9 @@ impl Browser {
 
                 // Get post data if available
                 let post_data = if request.has_post_data.unwrap_or(false) {
-                    request.post_data_entries.as_ref()
+                    request
+                        .post_data_entries
+                        .as_ref()
                         .and_then(|entries| entries.first())
                         .and_then(|entry| entry.bytes.as_ref())
                         .map(|b| String::from_utf8_lossy(b.as_ref()).to_string())
@@ -144,24 +150,30 @@ impl Browser {
                 };
 
                 // Log interesting API requests
-                if network_request.url.contains("/api/") 
-                    || network_request.url.contains("/graphql") 
+                if network_request.url.contains("/api/")
+                    || network_request.url.contains("/graphql")
                     || network_request.url.contains("/v1/")
                     || network_request.url.contains("/v2/")
-                    || resource_type.contains("XHR") 
-                    || resource_type.contains("Fetch") {
-                    info!("🔍 API Request detected: {} {}", network_request.method, network_request.url);
-                    
+                    || resource_type.contains("XHR")
+                    || resource_type.contains("Fetch")
+                {
+                    info!(
+                        "🔍 API Request detected: {} {}",
+                        network_request.method, network_request.url
+                    );
+
                     // Log authentication headers if present
                     if let Some(auth) = network_request.headers.get("authorization") {
-                        info!("  🔑 Authorization header found: {}", 
-                            if auth.len() > 20 { 
-                                format!("{}...", &auth[..20]) 
-                            } else { 
-                                auth.clone() 
-                            });
+                        info!(
+                            "  🔑 Authorization header found: {}",
+                            if auth.len() > 20 {
+                                format!("{}...", &auth[..20])
+                            } else {
+                                auth.clone()
+                            }
+                        );
                     }
-                    
+
                     // Log payload for POST/PUT/PATCH requests
                     if let Some(ref payload) = network_request.post_data {
                         if payload.len() < 500 {
@@ -178,7 +190,7 @@ impl Browser {
 
         // Wait for page to load with timeout
         let timeout = std::time::Duration::from_secs(self.config.timeout_secs);
-        
+
         match tokio::time::timeout(timeout, page.wait_for_navigation()).await {
             Ok(Ok(_)) => {
                 debug!("Page navigation completed");
@@ -187,7 +199,10 @@ impl Browser {
                 warn!("Navigation error (continuing anyway): {}", e);
             }
             Err(_) => {
-                warn!("Navigation timeout after {} seconds", self.config.timeout_secs);
+                warn!(
+                    "Navigation timeout after {} seconds",
+                    self.config.timeout_secs
+                );
             }
         }
 
@@ -223,15 +238,17 @@ impl Browser {
 
         // Get captured network requests
         let captured_requests = network_requests.lock().await.clone();
-        
-        info!("Captured {} network requests (including {} API calls)", 
+
+        info!(
+            "Captured {} network requests (including {} API calls)",
             captured_requests.len(),
-            captured_requests.iter().filter(|r| 
-                r.url.contains("/api/") || 
-                r.url.contains("/graphql") ||
-                r.resource_type.contains("XHR") ||
-                r.resource_type.contains("Fetch")
-            ).count()
+            captured_requests
+                .iter()
+                .filter(|r| r.url.contains("/api/")
+                    || r.url.contains("/graphql")
+                    || r.resource_type.contains("XHR")
+                    || r.resource_type.contains("Fetch"))
+                .count()
         );
 
         // Get status code (default to 200 if successful)
@@ -256,10 +273,9 @@ impl Browser {
                 .filter(href => href && href.length > 0);
         "#;
 
-        let result = page
-            .evaluate(js_code)
-            .await
-            .map_err(|e| BrowserError::JsExecutionError(format!("Failed to extract links: {}", e)))?;
+        let result = page.evaluate(js_code).await.map_err(|e| {
+            BrowserError::JsExecutionError(format!("Failed to extract links: {}", e))
+        })?;
 
         let links: Vec<String> = result
             .into_value()
@@ -317,7 +333,9 @@ impl Browser {
         let screenshot = page
             .screenshot(chromiumoxide::page::ScreenshotParams::default())
             .await
-            .map_err(|e| BrowserError::ScreenshotError(format!("Failed to take screenshot: {}", e)))?;
+            .map_err(|e| {
+                BrowserError::ScreenshotError(format!("Failed to take screenshot: {}", e))
+            })?;
 
         Ok(screenshot)
     }
@@ -366,7 +384,7 @@ mod tests {
             request_id: "123".to_string(),
             timestamp: 0.0,
         };
-        
+
         assert_eq!(req.url, "https://api.example.com/users");
         assert_eq!(req.method, "GET");
         assert_eq!(req.resource_type, "XHR");

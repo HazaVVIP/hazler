@@ -1,6 +1,5 @@
 /// Request timing randomization for WAF evasion
 /// Adds random delays between requests to appear more human-like
-
 use rand::Rng;
 use std::time::Duration;
 
@@ -24,33 +23,33 @@ impl DelayConfig {
             jitter: true,
         }
     }
-    
+
     /// Create a stealth delay configuration (100-500ms with jitter)
     pub fn stealth() -> Self {
         Self::new(100, 500)
     }
-    
+
     /// Create an aggressive delay configuration (50-200ms)
     pub fn aggressive() -> Self {
         Self::new(50, 200)
     }
-    
+
     /// Create a cautious delay configuration (500-2000ms)
     pub fn cautious() -> Self {
         Self::new(500, 2000)
     }
-    
+
     /// Disable jitter
     pub fn without_jitter(mut self) -> Self {
         self.jitter = false;
         self
     }
-    
+
     /// Get a random delay duration
     pub fn get_delay(&self) -> Duration {
         let mut rng = rand::thread_rng();
         let base_delay = rng.gen_range(self.min_delay_ms..=self.max_delay_ms);
-        
+
         let final_delay = if self.jitter {
             // Add up to 20% jitter
             let jitter_amount = (base_delay as f64 * 0.2) as u64;
@@ -59,7 +58,7 @@ impl DelayConfig {
         } else {
             base_delay
         };
-        
+
         Duration::from_millis(final_delay)
     }
 }
@@ -81,7 +80,7 @@ mod tests {
         assert!(delay.as_millis() >= 100);
         assert!(delay.as_millis() <= 650); // 500 + 20% jitter = 600, with some margin
     }
-    
+
     #[test]
     fn test_stealth_delay() {
         let config = DelayConfig::stealth();
@@ -89,7 +88,7 @@ mod tests {
         assert!(delay.as_millis() >= 100);
         assert!(delay.as_millis() <= 650);
     }
-    
+
     #[test]
     fn test_aggressive_delay() {
         let config = DelayConfig::aggressive();
@@ -97,7 +96,7 @@ mod tests {
         assert!(delay.as_millis() >= 50);
         assert!(delay.as_millis() <= 260);
     }
-    
+
     #[test]
     fn test_cautious_delay() {
         let config = DelayConfig::cautious();
@@ -105,7 +104,7 @@ mod tests {
         assert!(delay.as_millis() >= 500);
         assert!(delay.as_millis() <= 2500);
     }
-    
+
     #[test]
     fn test_without_jitter() {
         let config = DelayConfig::new(100, 500).without_jitter();

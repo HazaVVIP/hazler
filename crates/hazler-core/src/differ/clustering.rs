@@ -3,8 +3,8 @@
 //! This module groups similar responses together to identify patterns
 //! and anomalies in web application behavior.
 
-use serde::{Deserialize, Serialize};
 use crate::differ::simhash::SimHash;
+use serde::{Deserialize, Serialize};
 
 /// A cluster of similar responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,12 +48,9 @@ impl KMeansClusterer {
         }
 
         let k = self.num_clusters.min(responses.len());
-        
+
         // Initialize centroids using first k responses
-        let mut centroids: Vec<SimHash> = responses.iter()
-            .take(k)
-            .map(|(_, hash)| *hash)
-            .collect();
+        let mut centroids: Vec<SimHash> = responses.iter().take(k).map(|(_, hash)| *hash).collect();
 
         let mut assignments = vec![0usize; responses.len()];
 
@@ -85,8 +82,10 @@ impl KMeansClusterer {
             }
 
             // Update step: recompute centroids
+            #[allow(clippy::needless_range_loop)]
             for c in 0..k {
-                let cluster_hashes: Vec<SimHash> = responses.iter()
+                let cluster_hashes: Vec<SimHash> = responses
+                    .iter()
                     .enumerate()
                     .filter(|(i, _)| assignments[*i] == c)
                     .map(|(_, (_, hash))| *hash)
@@ -100,8 +99,10 @@ impl KMeansClusterer {
 
         // Build cluster results
         let mut clusters = Vec::new();
+        #[allow(clippy::needless_range_loop)]
         for c in 0..k {
-            let cluster_items: Vec<(String, SimHash)> = responses.iter()
+            let cluster_items: Vec<(String, SimHash)> = responses
+                .iter()
                 .enumerate()
                 .filter(|(i, _)| assignments[*i] == c)
                 .map(|(_, item)| item.clone())
@@ -109,7 +110,9 @@ impl KMeansClusterer {
 
             if !cluster_items.is_empty() {
                 let urls: Vec<String> = cluster_items.iter().map(|(url, _)| url.clone()).collect();
-                let cohesion = Self::compute_cohesion(&cluster_items.iter().map(|(_, h)| *h).collect::<Vec<_>>());
+                let cohesion = Self::compute_cohesion(
+                    &cluster_items.iter().map(|(_, h)| *h).collect::<Vec<_>>(),
+                );
 
                 clusters.push(ResponseCluster {
                     id: c,
@@ -132,6 +135,7 @@ impl KMeansClusterer {
         let mut bit_counts = [0i32; 64];
 
         for hash in hashes {
+            #[allow(clippy::needless_range_loop)]
             for i in 0..64 {
                 if (hash.0 >> i) & 1 == 1 {
                     bit_counts[i] += 1;
@@ -142,7 +146,8 @@ impl KMeansClusterer {
         }
 
         let mut centroid = 0u64;
-        
+
+        #[allow(clippy::needless_range_loop)]
         for i in 0..64 {
             if bit_counts[i] > 0 {
                 centroid |= 1u64 << i;
@@ -215,7 +220,14 @@ impl DBSCANClusterer {
                 cluster_ids[i] = -1;
             } else {
                 // Start a new cluster
-                self.expand_cluster(i, &neighbors, cluster_id, responses, &mut visited, &mut cluster_ids);
+                self.expand_cluster(
+                    i,
+                    &neighbors,
+                    cluster_id,
+                    responses,
+                    &mut visited,
+                    &mut cluster_ids,
+                );
                 cluster_id += 1;
             }
         }
@@ -223,7 +235,8 @@ impl DBSCANClusterer {
         // Build cluster results
         let mut clusters = Vec::new();
         for c in 0..cluster_id {
-            let cluster_items: Vec<(String, SimHash)> = responses.iter()
+            let cluster_items: Vec<(String, SimHash)> = responses
+                .iter()
                 .enumerate()
                 .filter(|(i, _)| cluster_ids[*i] == c)
                 .map(|(_, item)| item.clone())
@@ -271,7 +284,7 @@ impl DBSCANClusterer {
         cluster_ids: &mut [i32],
     ) {
         use std::collections::HashSet;
-        
+
         cluster_ids[point] = cluster_id;
 
         let mut queue: Vec<usize> = neighbors.to_vec();
@@ -321,7 +334,7 @@ mod tests {
         let responses = create_test_responses();
         let clusterer = KMeansClusterer::new(2);
         let clusters = clusterer.cluster(&responses);
-        
+
         assert!(!clusters.is_empty());
         assert!(clusters.len() <= 2);
     }
@@ -331,18 +344,16 @@ mod tests {
         let responses = Vec::new();
         let clusterer = KMeansClusterer::new(2);
         let clusters = clusterer.cluster(&responses);
-        
+
         assert!(clusters.is_empty());
     }
 
     #[test]
     fn test_kmeans_single_cluster() {
-        let responses = vec![
-            ("url1".to_string(), SimHash::new(100)),
-        ];
+        let responses = vec![("url1".to_string(), SimHash::new(100))];
         let clusterer = KMeansClusterer::new(1);
         let clusters = clusterer.cluster(&responses);
-        
+
         assert_eq!(clusters.len(), 1);
         assert_eq!(clusters[0].urls.len(), 1);
     }
@@ -352,7 +363,7 @@ mod tests {
         let responses = create_test_responses();
         let clusterer = DBSCANClusterer::new(0.3, 2);
         let clusters = clusterer.cluster(&responses);
-        
+
         // DBSCAN might create different number of clusters based on density
         assert!(!clusters.is_empty() || responses.len() < 2);
     }
@@ -362,7 +373,7 @@ mod tests {
         let responses = Vec::new();
         let clusterer = DBSCANClusterer::new(0.3, 2);
         let clusters = clusterer.cluster(&responses);
-        
+
         assert!(clusters.is_empty());
     }
 
@@ -373,18 +384,15 @@ mod tests {
             SimHash::new(0b1110),
             SimHash::new(0b1100),
         ];
-        
+
         let centroid = KMeansClusterer::compute_centroid(&hashes);
         assert!(centroid.0 > 0);
     }
 
     #[test]
     fn test_compute_cohesion() {
-        let hashes = vec![
-            SimHash::new(0b1111),
-            SimHash::new(0b1111),
-        ];
-        
+        let hashes = vec![SimHash::new(0b1111), SimHash::new(0b1111)];
+
         let cohesion = KMeansClusterer::compute_cohesion(&hashes);
         assert_eq!(cohesion, 1.0);
     }

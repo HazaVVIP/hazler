@@ -78,10 +78,10 @@ impl UrlMutator {
     fn pluralize_url(&self, url: &Url, seen: &mut HashSet<String>) -> Vec<Mutation> {
         let mut mutations = Vec::new();
         let path = url.path();
-        
+
         // Split path into segments
         let segments: Vec<&str> = path.split('/').collect();
-        
+
         for (i, segment) in segments.iter().enumerate() {
             if segment.is_empty() {
                 continue;
@@ -92,12 +92,12 @@ impl UrlMutator {
                 let mut new_segments = segments.clone();
                 new_segments[i] = &plural;
                 let new_path = new_segments.join("/");
-                
+
                 if let Ok(mut new_url) = url.clone().join(&new_path) {
                     // Preserve query and fragment
                     new_url.set_query(url.query());
                     new_url.set_fragment(url.fragment());
-                    
+
                     if seen.insert(new_url.to_string()) {
                         mutations.push(Mutation {
                             url: new_url,
@@ -108,7 +108,7 @@ impl UrlMutator {
                 }
             }
         }
-        
+
         mutations
     }
 
@@ -179,10 +179,14 @@ impl UrlMutator {
                 format!("{}.{}", path, ext)
             };
 
-            if let Ok(mut new_url) = Url::parse(&format!("{}{}", url.origin().ascii_serialization(), new_path)) {
+            if let Ok(mut new_url) = Url::parse(&format!(
+                "{}{}",
+                url.origin().ascii_serialization(),
+                new_path
+            )) {
                 new_url.set_query(url.query());
                 new_url.set_fragment(url.fragment());
-                
+
                 if seen.insert(new_url.to_string()) {
                     mutations.push(Mutation {
                         url: new_url,
@@ -210,15 +214,19 @@ impl UrlMutator {
         for version in &self.config.api_versions {
             // Add version at different positions
             let positions = vec![
-                format!("/{}{}", version, path),                    // /v1/api/users
+                format!("/{}{}", version, path), // /v1/api/users
                 format!("/api/{}{}", version, path.trim_start_matches("/api")), // /api/v1/users
             ];
 
             for new_path in positions {
-                if let Ok(mut new_url) = Url::parse(&format!("{}{}", url.origin().ascii_serialization(), new_path)) {
+                if let Ok(mut new_url) = Url::parse(&format!(
+                    "{}{}",
+                    url.origin().ascii_serialization(),
+                    new_path
+                )) {
                     new_url.set_query(url.query());
                     new_url.set_fragment(url.fragment());
-                    
+
                     if seen.insert(new_url.to_string()) {
                         mutations.push(Mutation {
                             url: new_url,
@@ -255,9 +263,9 @@ mod tests {
         let config = FuzzerConfig::default();
         let mutator = UrlMutator::new(config);
         let url = Url::parse("https://api.example.com/user/123").unwrap();
-        
+
         let mutations = mutator.generate_mutations(&url);
-        
+
         // Should contain pluralized version
         let has_users = mutations.iter().any(|m| m.url.path().contains("users"));
         assert!(has_users, "Should generate /users mutation");
@@ -268,13 +276,13 @@ mod tests {
         let config = FuzzerConfig::default();
         let mutator = UrlMutator::new(config);
         let url = Url::parse("https://api.example.com/user").unwrap();
-        
+
         let mutations = mutator.generate_mutations(&url);
-        
+
         // Should contain extension mutations
         let has_json = mutations.iter().any(|m| m.url.path().ends_with(".json"));
         let has_xml = mutations.iter().any(|m| m.url.path().ends_with(".xml"));
-        
+
         assert!(has_json, "Should generate .json mutation");
         assert!(has_xml, "Should generate .xml mutation");
     }
@@ -284,13 +292,13 @@ mod tests {
         let config = FuzzerConfig::default();
         let mutator = UrlMutator::new(config);
         let url = Url::parse("https://api.example.com/user").unwrap();
-        
+
         let mutations = mutator.generate_mutations(&url);
-        
+
         // Should contain version mutations
         let has_v1 = mutations.iter().any(|m| m.url.path().contains("/v1/"));
         let has_v2 = mutations.iter().any(|m| m.url.path().contains("/v2/"));
-        
+
         assert!(has_v1, "Should generate /v1/ mutation");
         assert!(has_v2, "Should generate /v2/ mutation");
     }
@@ -300,11 +308,15 @@ mod tests {
         let config = FuzzerConfig::default();
         let mutator = UrlMutator::new(config);
         let url = Url::parse("https://api.example.com/user").unwrap();
-        
+
         let mutations = mutator.generate_mutations(&url);
         let unique_urls: HashSet<String> = mutations.iter().map(|m| m.url.to_string()).collect();
-        
-        assert_eq!(mutations.len(), unique_urls.len(), "Should not generate duplicate mutations");
+
+        assert_eq!(
+            mutations.len(),
+            unique_urls.len(),
+            "Should not generate duplicate mutations"
+        );
     }
 
     #[test]
@@ -313,9 +325,9 @@ mod tests {
         config.max_mutations = 5;
         let mutator = UrlMutator::new(config);
         let url = Url::parse("https://api.example.com/user").unwrap();
-        
+
         let mutations = mutator.generate_mutations(&url);
-        
+
         assert!(mutations.len() <= 5, "Should respect max_mutations limit");
     }
 }

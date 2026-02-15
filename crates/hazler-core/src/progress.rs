@@ -1,6 +1,5 @@
 /// Progress tracking and reporting for crawl operations
 /// Provides real-time feedback on crawling progress
-
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::info;
@@ -70,8 +69,10 @@ pub struct ProgressTracker {
 impl ProgressTracker {
     /// Create a new progress tracker
     pub fn new(max_pages: usize) -> Self {
-        let mut stats = ProgressStats::default();
-        stats.start_time = Some(Instant::now());
+        let stats = ProgressStats {
+            start_time: Some(Instant::now()),
+            ..Default::default()
+        };
 
         Self {
             stats: Arc::new(Mutex::new(stats)),

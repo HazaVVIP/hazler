@@ -78,11 +78,7 @@ pub async fn send_to_slack(result: &CrawlResult, webhook_url: &str) -> anyhow::R
 
     // Send to Slack
     let client = reqwest::Client::new();
-    let response = client
-        .post(webhook_url)
-        .json(&payload)
-        .send()
-        .await?;
+    let response = client.post(webhook_url).json(&payload).send().await?;
 
     if !response.status().is_success() {
         anyhow::bail!("Failed to send to Slack: {}", response.status());
@@ -170,11 +166,7 @@ pub async fn send_to_discord(result: &CrawlResult, webhook_url: &str) -> anyhow:
 
     // Send to Discord
     let client = reqwest::Client::new();
-    let response = client
-        .post(webhook_url)
-        .json(&payload)
-        .send()
-        .await?;
+    let response = client.post(webhook_url).json(&payload).send().await?;
 
     if !response.status().is_success() {
         anyhow::bail!("Failed to send to Discord: {}", response.status());
@@ -229,11 +221,7 @@ pub async fn send_to_webhook(result: &CrawlResult, webhook_url: &str) -> anyhow:
 
     // Send to webhook
     let client = reqwest::Client::new();
-    let response = client
-        .post(webhook_url)
-        .json(&payload)
-        .send()
-        .await?;
+    let response = client.post(webhook_url).json(&payload).send().await?;
 
     if !response.status().is_success() {
         anyhow::bail!("Failed to send to webhook: {}", response.status());

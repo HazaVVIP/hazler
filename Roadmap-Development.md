@@ -71,9 +71,22 @@
 - ✅ **53+ unit tests** covering all functionality
 - ✨ **Impact:** Detect subtle changes in web apps, identify anomalies, track modifications over time
 
+**Retry & Persistence Framework - FULLY IMPLEMENTED ✅** (NEW - Feb 15, 2026)
+- 🔄 Smart retry logic with exponential backoff and jitter
+- 🛡️ Circuit breaker pattern for failing domains (prevents cascading failures)
+- 🎯 Per-domain rate limiting using token bucket algorithm
+- 📊 Adaptive rate limiting (adjusts based on 429 responses)
+- 💾 State persistence with JSON backend (SQLite ready)
+- ⏸️ Resume functionality for interrupted crawls
+- 🛑 Graceful shutdown handler (Ctrl+C support)
+- 📈 Real-time progress tracking and reporting
+- 🎛️ **CLI flags implemented** - `--resume`, `--auto-save`, `--max-retries`, `--circuit-breaker`, `--rate-limit`, `--progress`
+- ✅ **140+ unit tests** covering all functionality
+- ✨ **Impact:** Reliable, resumable crawls with intelligent failure handling and rate limiting
+
 **Current Status:**
-- ✅ Phase 1: 100% complete (8 of 8 weeks) - Response Diffing COMPLETED!
-- 🎯 Next: Entropy Detection, Authentication Framework, Rate Limiting Intelligence
+- ✅ Phase 1: 100% complete (8 of 8 weeks) - Retry & Persistence COMPLETED!
+- 🎯 Next: Entropy Detection, Authentication Framework, Advanced Features
 - 📚 See `IMPLEMENTATION_SUMMARY.md` for detailed implementation notes
 
 ---
@@ -1045,22 +1058,22 @@ pub struct CircuitBreaker {
 - [ ] Write comprehensive tests
 - [ ] Documentation and examples
 
-#### Week 16: Rate Limiting & Retry
-- [ ] Implement exponential backoff
-- [ ] Add jitter to delays
-- [ ] Create circuit breaker pattern
-- [ ] Implement per-domain rate limiter
-- [ ] Add 429 response detection
-- [ ] Auto-adjust concurrency logic
-- [ ] Test resilience against rate limiting
-- [ ] Write tests
-- [ ] Documentation
+#### Week 16: Rate Limiting & Retry ✅ COMPLETED (Feb 15, 2026)
+- [x] Implement exponential backoff
+- [x] Add jitter to delays
+- [x] Create circuit breaker pattern
+- [x] Implement per-domain rate limiter
+- [x] Add 429 response detection
+- [x] Auto-adjust concurrency logic (adaptive rate limiting)
+- [x] Test resilience against rate limiting
+- [x] Write tests (140+ tests passing)
+- [x] Documentation
 
 ### Q3 2026 - Polish (Weeks 17-26)
 
 #### P2 Features Implementation
 - [ ] Proxy Pool Manager (Week 17)
-- [ ] Crawl State Persistence (Week 18)
+- [x] Crawl State Persistence (Week 18) - COMPLETED (Feb 15, 2026)
 - [ ] Diff Mode CLI (Week 19)
 - [ ] Watch Mode CLI (Week 20)
 - [ ] Multi-Format Parser (Week 21)

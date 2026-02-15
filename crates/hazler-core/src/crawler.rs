@@ -33,6 +33,8 @@ struct CrawlPageContext {
     secret_scanner: Option<SecretScanner>,
     noise_filter: Arc<Mutex<NoiseFilter>>,
     delay_config: Option<DelayConfig>,
+    graphql_introspect: bool,
+    parse_source_maps: bool,
     #[cfg(feature = "browser")]
     browser: Option<Arc<Browser>>,
 }
@@ -189,6 +191,8 @@ impl Crawler {
                     let secret_scanner = self.secret_scanner.clone();
                     let noise_filter = Arc::clone(&noise_filter);
                     let delay_config = delay_config.clone();
+                    let graphql_introspect = self.config.graphql_introspect;
+                    let parse_source_maps = self.config.parse_source_maps;
                     #[cfg(feature = "browser")]
                     let browser = self.browser.clone();
 
@@ -214,6 +218,8 @@ impl Crawler {
                             secret_scanner,
                             noise_filter,
                             delay_config,
+                            graphql_introspect,
+                            parse_source_maps,
                             #[cfg(feature = "browser")]
                             browser,
                         };
@@ -523,7 +529,7 @@ impl Crawler {
             }
 
             // Check for source map references in JS files
-            if url.path().ends_with(".js") {
+            if context.parse_source_maps && url.path().ends_with(".js") {
                 let source_map_refs = context.sourcemap_parser.detect_source_map_references(&response.body, &url);
                 if !source_map_refs.is_empty() {
                     info!(
@@ -542,7 +548,7 @@ impl Crawler {
             }
 
             // Parse source map files (.map extension)
-            if url.path().ends_with(".map") {
+            if context.parse_source_maps && url.path().ends_with(".map") {
                 match context.sourcemap_parser.parse_source_map(&response.body) {
                     Ok(source_map) => {
                         let analysis = context.sourcemap_parser.analyze_source_map(&source_map, url.as_str());

@@ -13,14 +13,16 @@
 //!
 //! ## Example
 //!
-//! ```no_run
+//! ```
 //! use hazler_core::differ::{ResponseDiffer, DifferConfig};
 //!
 //! let config = DifferConfig::default();
 //! let differ = ResponseDiffer::new(config);
 //!
 //! // Compare two responses
-//! let similarity = differ.compare_responses(&response1, &response2);
+//! let response1 = "<html><body>Hello World</body></html>";
+//! let response2 = "<html><body>Hello World!</body></html>";
+//! let similarity = differ.compare_responses(response1, response2);
 //! println!("Similarity: {:.2}%", similarity * 100.0);
 //! ```
 

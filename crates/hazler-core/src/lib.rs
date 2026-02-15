@@ -91,10 +91,12 @@ pub mod differ;
 pub mod noise_filter;
 pub mod normalizer;
 pub mod persistence;
+pub mod progress;
 pub mod queue;
 pub mod rate_limiter;
 pub mod retry;
 pub mod scope;
+pub mod shutdown;
 pub mod types;
 
 pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
@@ -111,8 +113,10 @@ pub use normalizer::AdvancedUrlNormalizer;
 pub use persistence::{
     AutoSave, ConfigSnapshot, CrawlState, PersistenceBackend, QueuedUrl, StatePersistence,
 };
+pub use progress::{ProgressStats, ProgressTracker};
 pub use queue::UrlQueue;
 pub use rate_limiter::{RateLimiter, RateLimiterConfig};
 pub use retry::{is_retryable_status, retry_with_backoff, RetryConfig};
 pub use scope::ScopeValidator;
+pub use shutdown::{GracefulShutdown, ShutdownHandler};
 pub use types::{CrawlResult, Finding, FindingStats, Page, Severity};

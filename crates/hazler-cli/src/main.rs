@@ -207,6 +207,41 @@ struct Args {
     /// Number of clusters for K-means
     #[arg(long, default_value = "5")]
     num_clusters: usize,
+
+    /// Resume from saved state file
+    /// Continues crawling from where it was left off
+    /// Example: --resume hazler-state.json
+    #[arg(long, value_name = "FILE")]
+    resume: Option<String>,
+
+    /// Auto-save state every N seconds (0 to disable)
+    /// Periodically saves crawl state for recovery
+    /// Example: --auto-save 30
+    #[arg(long, default_value = "60")]
+    auto_save: u64,
+
+    /// Maximum retry attempts for failed requests
+    /// Uses exponential backoff between retries
+    /// Example: --max-retries 3
+    #[arg(long, default_value = "3")]
+    max_retries: u32,
+
+    /// Enable circuit breaker for failing domains
+    /// Temporarily stops requests to domains with repeated failures
+    #[arg(long)]
+    circuit_breaker: bool,
+
+    /// Requests per second per domain (rate limiting)
+    /// Controls the crawl rate to avoid overwhelming servers
+    /// Example: --rate-limit 10
+    #[arg(long, default_value = "10")]
+    rate_limit: f64,
+
+    /// Progress reporting interval in seconds
+    /// Shows crawl progress at regular intervals
+    /// Example: --progress 5
+    #[arg(long, default_value = "5")]
+    progress: u64,
 }
 
 #[tokio::main]

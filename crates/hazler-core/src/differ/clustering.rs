@@ -142,10 +142,9 @@ impl KMeansClusterer {
         }
 
         let mut centroid = 0u64;
-        let threshold = hashes.len() as i32 / 2;
         
         for i in 0..64 {
-            if bit_counts[i] > threshold {
+            if bit_counts[i] > 0 {
                 centroid |= 1u64 << i;
             }
         }
@@ -271,9 +270,12 @@ impl DBSCANClusterer {
         visited: &mut [bool],
         cluster_ids: &mut [i32],
     ) {
+        use std::collections::HashSet;
+        
         cluster_ids[point] = cluster_id;
 
         let mut queue: Vec<usize> = neighbors.to_vec();
+        let mut in_queue: HashSet<usize> = queue.iter().copied().collect();
         let mut idx = 0;
 
         while idx < queue.len() {
@@ -286,8 +288,9 @@ impl DBSCANClusterer {
 
                 if current_neighbors.len() >= self.min_points {
                     for &neighbor in &current_neighbors {
-                        if !queue.contains(&neighbor) {
+                        if !in_queue.contains(&neighbor) {
                             queue.push(neighbor);
+                            in_queue.insert(neighbor);
                         }
                     }
                 }

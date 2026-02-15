@@ -54,11 +54,6 @@ impl ChangeDetector {
         }
     }
 
-    /// Create a change detector with default settings
-    pub fn default() -> Self {
-        Self::new(0.15, 100) // 15% difference or 100 bytes
-    }
-
     /// Detect changes between two responses
     pub fn detect_change(
         &self,
@@ -184,6 +179,12 @@ impl ChangeDetector {
             .into_iter()
             .filter(|change| change.is_significant)
             .collect()
+    }
+}
+
+impl Default for ChangeDetector {
+    fn default() -> Self {
+        Self::new(0.15, 100) // 15% difference or 100 bytes
     }
 }
 

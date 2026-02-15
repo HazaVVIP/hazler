@@ -26,3 +26,8 @@ colored = "2.1"
 indicatif = "0.17"
 chrono = "0.4"
 base64 = "0.22"
+printpdf = "0.7"
+rusqlite = { version = "0.32", features = ["bundled"] }
+elasticsearch = "8.5.0-alpha.1"
+reqwest = { workspace = true }
+uuid = { version = "1.6", features = ["v4"] }

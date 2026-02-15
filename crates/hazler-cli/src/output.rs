@@ -223,6 +223,197 @@ impl OutputFormatter {
     fn escape_csv(s: &str) -> String {
         s.replace("\"", "\"\"")
     }
+
+    /// Format as Nuclei JSON (vulnerability scanner format)
+    /// Each page is formatted as a Nuclei finding with template info
+    pub fn format_nuclei(&self, result: &CrawlResult) -> Result<Vec<String>, serde_json::Error> {
+        result
+            .pages
+            .iter()
+            .map(|page| {
+                let severity = if page.status_code >= 500 {
+                    "high"
+                } else if page.status_code >= 400 {
+                    "medium"
+                } else if page.status_code >= 300 {
+                    "low"
+                } else {
+                    "info"
+                };
+
+                let template_id = if !page.secrets.is_empty() {
+                    "hazler-secrets-detected"
+                } else {
+                    "hazler-crawl-result"
+                };
+
+                let name = if !page.secrets.is_empty() {
+                    format!("Secrets Detected ({} findings)", page.secrets.len())
+                } else {
+                    "Web Crawl Result".to_string()
+                };
+
+                let output = json!({
+                    "template-id": template_id,
+                    "info": {
+                        "name": name,
+                        "severity": severity,
+                        "tags": ["hazler", "crawl"]
+                    },
+                    "type": "http",
+                    "host": format!("{}://{}", page.url.scheme(), page.url.host_str().unwrap_or("")),
+                    "matched-at": page.url.as_str(),
+                    "extracted-results": page.secrets.iter().map(|s| format!("{:?}: {}", s.severity, s.secret_type)).collect::<Vec<_>>(),
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                    "matcher-status": true,
+                    "metadata": {
+                        "status_code": page.status_code,
+                        "depth": page.depth,
+                        "content_type": page.content_type.as_deref().unwrap_or("unknown"),
+                        "num_links": page.links.len()
+                    }
+                });
+
+                serde_json::to_string(&output)
+            })
+            .collect()
+    }
+
+    /// Format as ffuf JSON (web fuzzer format)
+    /// Each page is formatted as a ffuf result entry
+    pub fn format_ffuf(&self, result: &CrawlResult) -> Result<Vec<String>, serde_json::Error> {
+        result
+            .pages
+            .iter()
+            .enumerate()
+            .map(|(idx, page)| {
+                // Count words and lines in body
+                let words = page.body.split_whitespace().count();
+                let lines = page.body.lines().count();
+
+                let output = json!({
+                    "input": {
+                        "URL": page.url.as_str()
+                    },
+                    "position": idx + 1,
+                    "status": page.status_code,
+                    "length": page.body.len(),
+                    "words": words,
+                    "lines": lines,
+                    "content-type": page.content_type.as_deref().unwrap_or(""),
+                    "redirectlocation": "",
+                    "url": page.url.as_str(),
+                    "resultfile": "",
+                    "metadata": {
+                        "depth": page.depth,
+                        "num_links": page.links.len(),
+                        "secrets_found": page.secrets.len()
+                    }
+                });
+
+                serde_json::to_string(&output)
+            })
+            .collect()
+    }
+
+    /// Format as Burp Suite XML (site map format)
+    /// Generates a complete Burp-compatible XML document
+    pub fn format_burp(&self, result: &CrawlResult) -> String {
+        use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+
+        let mut xml = String::new();
+
+        // XML header and DOCTYPE
+        xml.push_str("<?xml version=\"1.0\"?>\n");
+        xml.push_str("<!DOCTYPE items [\n");
+        xml.push_str("<!ELEMENT items (item*)>\n");
+        xml.push_str("<!ATTLIST items burpVersion CDATA \"\">\n");
+        xml.push_str("<!ELEMENT item (time, url, host, port, protocol, method, path, extension, request, status, responselength, mimetype, response, comment)>\n");
+        xml.push_str("]>\n");
+        xml.push_str("<items burpVersion=\"Hazler-0.1.0\">\n");
+
+        // Process each page
+        for page in &result.pages {
+            let host = page.url.host_str().unwrap_or("");
+            let port = page.url.port_or_known_default().unwrap_or(80);
+            let protocol = page.url.scheme();
+            let path = page.url.path();
+            
+            // Determine extension from path
+            let extension = path
+                .split('/')
+                .last()
+                .and_then(|f| f.rsplit_once('.'))
+                .map(|(_, ext)| ext)
+                .unwrap_or("null");
+
+            // Create minimal HTTP request
+            let request_str = format!("GET {} HTTP/1.1\r\nHost: {}\r\n\r\n", path, host);
+            let request_b64 = BASE64.encode(request_str.as_bytes());
+
+            // Encode response body
+            let response_b64 = BASE64.encode(page.body.as_bytes());
+
+            // Determine MIME type
+            let mimetype = page
+                .content_type
+                .as_deref()
+                .and_then(|ct| {
+                    if ct.contains("html") {
+                        Some("HTML")
+                    } else if ct.contains("json") {
+                        Some("JSON")
+                    } else if ct.contains("xml") {
+                        Some("XML")
+                    } else if ct.contains("javascript") {
+                        Some("script")
+                    } else {
+                        Some("other")
+                    }
+                })
+                .unwrap_or("other");
+
+            // Current timestamp
+            let time = chrono::Local::now().format("%a %b %d %H:%M:%S %Z %Y");
+
+            xml.push_str("  <item>\n");
+            xml.push_str(&format!("    <time>{}</time>\n", time));
+            xml.push_str(&format!("    <url>{}</url>\n", Self::escape_xml(page.url.as_str())));
+            xml.push_str(&format!("    <host>{}</host>\n", Self::escape_xml(host)));
+            xml.push_str(&format!("    <port>{}</port>\n", port));
+            xml.push_str(&format!("    <protocol>{}</protocol>\n", protocol));
+            xml.push_str(&format!("    <method>GET</method>\n"));
+            xml.push_str(&format!("    <path>{}</path>\n", Self::escape_xml(path)));
+            xml.push_str(&format!("    <extension>{}</extension>\n", extension));
+            xml.push_str(&format!("    <request base64=\"true\">{}</request>\n", request_b64));
+            xml.push_str(&format!("    <status>{}</status>\n", page.status_code));
+            xml.push_str(&format!("    <responselength>{}</responselength>\n", page.body.len()));
+            xml.push_str(&format!("    <mimetype>{}</mimetype>\n", mimetype));
+            xml.push_str(&format!("    <response base64=\"true\">{}</response>\n", response_b64));
+            
+            // Add comment with secret findings if any
+            let comment = if !page.secrets.is_empty() {
+                format!("Hazler: {} secrets detected", page.secrets.len())
+            } else {
+                String::new()
+            };
+            xml.push_str(&format!("    <comment>{}</comment>\n", Self::escape_xml(&comment)));
+            
+            xml.push_str("  </item>\n");
+        }
+
+        xml.push_str("</items>\n");
+        xml
+    }
+
+    /// Escape XML special characters
+    fn escape_xml(s: &str) -> String {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+            .replace('\'', "&apos;")
+    }
 }
 
 /// Generate statistics report

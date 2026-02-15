@@ -13,6 +13,9 @@ pub enum Error {
 
     #[error("Too many redirects")]
     TooManyRedirects,
+
+    #[error("Authentication failed: {0}")]
+    AuthenticationFailed(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

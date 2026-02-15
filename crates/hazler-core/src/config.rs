@@ -57,6 +57,8 @@ pub struct Config {
     pub graphql_introspect: bool,
     /// Enable source map parsing (enabled by default)
     pub parse_source_maps: bool,
+    /// Authentication configuration file path
+    pub auth_config_file: Option<String>,
 }
 
 impl Default for Config {
@@ -81,6 +83,7 @@ impl Default for Config {
             disable_images: false,
             graphql_introspect: false,
             parse_source_maps: true, // Enable source map parsing by default
+            auth_config_file: None,
         }
     }
 }
@@ -397,6 +400,22 @@ impl Config {
     /// ```
     pub fn parse_source_maps(mut self, enabled: bool) -> Self {
         self.parse_source_maps = enabled;
+        self
+    }
+
+    /// Set authentication configuration file path
+    ///
+    /// Loads authentication credentials from a JSON file.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().auth_config_file("auth.json".to_string());
+    /// ```
+    pub fn auth_config_file(mut self, path: String) -> Self {
+        self.auth_config_file = Some(path);
         self
     }
 }

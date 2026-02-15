@@ -854,8 +854,11 @@ dependencies = [
 name = "hazler-http"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "rand",
  "reqwest 0.11.27",
+ "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",

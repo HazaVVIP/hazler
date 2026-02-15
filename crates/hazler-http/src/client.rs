@@ -1,6 +1,8 @@
+use crate::auth::{ApiKeyLocation, AuthConfig, AuthMethod, FormAuth};
 use crate::error::{Error, Result};
 use crate::user_agents::{UserAgentDatabase, generate_chrome_client_hints};
 use reqwest::{Client, header};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, warn};
@@ -17,6 +19,7 @@ pub struct HttpClient {
     user_agent_db: Arc<UserAgentDatabase>,
     rotate_user_agent: bool,
     add_chrome_hints: bool,
+    auth_config: Option<AuthConfig>,
 }
 
 impl HttpClient {
@@ -26,6 +29,7 @@ impl HttpClient {
             .user_agent(user_agent)
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::limited(10))
+            .cookie_store(true) // Enable cookie jar for session management
             .build()
             .map_err(Error::RequestFailed)?;
 
@@ -35,6 +39,7 @@ impl HttpClient {
             user_agent_db: Arc::new(UserAgentDatabase::new()),
             rotate_user_agent: false,
             add_chrome_hints: false,
+            auth_config: None,
         })
     }
     
@@ -50,17 +55,164 @@ impl HttpClient {
         self
     }
 
+    /// Set authentication configuration
+    pub fn with_auth(mut self, auth_config: AuthConfig) -> Self {
+        debug!(
+            "Authentication configured: {}",
+            auth_config.method.sanitized_display()
+        );
+        self.auth_config = Some(auth_config);
+        self
+    }
+
     /// Create a default HTTP client
     pub fn new_default() -> Result<Self> {
         Self::new("Hazler/0.1.0", Duration::from_secs(10))
+    }
+
+    /// Apply authentication to a request
+    fn apply_auth(
+        &self,
+        mut request: reqwest::RequestBuilder,
+        url: &Url,
+        auth_method: &AuthMethod,
+    ) -> Result<reqwest::RequestBuilder> {
+        match auth_method {
+            AuthMethod::None => {}
+            AuthMethod::Basic { username, password } => {
+                // HTTP Basic Authentication
+                request = request.basic_auth(username, Some(password));
+                debug!("Applied Basic authentication for user: {}", username);
+            }
+            AuthMethod::Bearer { token } => {
+                // Bearer token authentication
+                request = request.bearer_auth(token);
+                debug!("Applied Bearer token authentication");
+            }
+            AuthMethod::Cookie { cookies } => {
+                // Cookie-based authentication
+                // Note: reqwest handles cookies automatically with cookie_store enabled
+                // We set them here for initial requests
+                let cookie_str = cookies
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", k, v))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                request = request.header(header::COOKIE, cookie_str);
+                debug!("Applied {} cookies", cookies.len());
+            }
+            AuthMethod::Header { name, value } => {
+                // Custom header authentication
+                request = request.header(name, value);
+                debug!("Applied custom header: {}", name);
+            }
+            AuthMethod::ApiKey {
+                key,
+                location,
+                name,
+            } => {
+                // API Key authentication
+                match location {
+                    ApiKeyLocation::Header => {
+                        request = request.header(name, key);
+                        debug!("Applied API key in header: {}", name);
+                    }
+                    ApiKeyLocation::Query => {
+                        // Query parameter handling is done before request creation in fetch()
+                        // to avoid losing already-set headers
+                    }
+                    ApiKeyLocation::Cookie => {
+                        let cookie_str = format!("{}={}", name, key);
+                        request = request.header(header::COOKIE, cookie_str);
+                        debug!("Applied API key in cookie: {}", name);
+                    }
+                }
+            }
+            AuthMethod::OAuth2 {
+                access_token,
+                token_type,
+                ..
+            } => {
+                // OAuth 2.0 authentication
+                let token_type = token_type.as_deref().unwrap_or("Bearer");
+                let auth_value = format!("{} {}", token_type, access_token);
+                request = request.header(header::AUTHORIZATION, auth_value);
+                debug!("Applied OAuth2 authentication ({})", token_type);
+            }
+        }
+
+        Ok(request)
+    }
+
+    /// Perform form-based authentication
+    pub async fn form_login(&self, form_auth: &FormAuth) -> Result<()> {
+        debug!("Performing form-based login to: {}", form_auth.login_url);
+
+        let login_url = Url::parse(&form_auth.login_url)
+            .map_err(|e| Error::InvalidUrl(e.to_string()))?;
+
+        // Build form data
+        let mut form_data = HashMap::new();
+        form_data.insert(
+            form_auth.username_field.clone(),
+            form_auth.username.clone(),
+        );
+        form_data.insert(
+            form_auth.password_field.clone(),
+            form_auth.password.clone(),
+        );
+
+        // Add extra fields (e.g., CSRF tokens)
+        for (key, value) in &form_auth.extra_fields {
+            form_data.insert(key.clone(), value.clone());
+        }
+
+        // Submit the form
+        let response = self
+            .client
+            .post(login_url.as_str())
+            .form(&form_data)
+            .send()
+            .await
+            .map_err(Error::RequestFailed)?;
+
+        let status = response.status();
+        if status.is_success() || (status.is_redirection() && form_auth.follow_redirects) {
+            debug!("Form login successful (status: {})", status);
+            // Cookies are automatically stored in the cookie jar
+            Ok(())
+        } else {
+            warn!("Form login failed with status: {}", status);
+            Err(Error::AuthenticationFailed(format!(
+                "Form login failed with status: {}",
+                status
+            )))
+        }
     }
 
     /// Fetch a URL and return the response
     pub async fn fetch(&self, url: &Url) -> Result<HttpResponse> {
         debug!("Fetching URL: {}", url);
 
+        // Pre-process URL for API key in query parameter if needed
+        let mut final_url = url.clone();
+        let mut skip_api_key_in_auth = false;
+        
+        if let Some(auth_config) = &self.auth_config {
+            if let AuthMethod::ApiKey {
+                key,
+                location: ApiKeyLocation::Query,
+                name,
+            } = &auth_config.method
+            {
+                final_url.query_pairs_mut().append_pair(name, key);
+                skip_api_key_in_auth = true;
+                debug!("Applied API key in query parameter: {}", name);
+            }
+        }
+
         // Build request with optional User-Agent rotation and Chrome hints
-        let mut request = self.client.get(url.as_str());
+        let mut request = self.client.get(final_url.as_str());
         
         // Apply User-Agent rotation if enabled
         if self.rotate_user_agent {
@@ -76,6 +228,13 @@ impl HttpClient {
                     }
                     debug!("Added Chrome client hints");
                 }
+            }
+        }
+        
+        // Apply authentication if configured (skip query-based API key as already handled)
+        if let Some(auth_config) = &self.auth_config {
+            if !skip_api_key_in_auth {
+                request = self.apply_auth(request, url, &auth_config.method)?;
             }
         }
         

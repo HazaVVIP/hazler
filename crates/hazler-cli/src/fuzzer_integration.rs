@@ -4,11 +4,7 @@ use tracing::info;
 use url::Url;
 
 /// Apply fuzzing to discovered URLs based on fuzz flag and level
-pub fn apply_fuzzing(
-    urls: &[Url],
-    fuzz: bool,
-    fuzz_level: &str,
-) -> Vec<Url> {
+pub fn apply_fuzzing(urls: &[Url], fuzz: bool, fuzz_level: &str) -> Vec<Url> {
     // Check if fuzzing is disabled
     if !fuzz || fuzz_level == "off" {
         return Vec::new();
@@ -20,11 +16,11 @@ pub fn apply_fuzzing(
 
     // Determine what to enable based on level
     let (enable_mutations, enable_params, enable_endpoints) = match fuzz_level {
-        "minimal" => (true, false, false),      // Basic mutations only
-        "default" => (true, false, false),      // Smart fuzzing (mutations)
-        "aggressive" => (true, true, false),    // Smart + params
-        "full" => (true, true, true),           // All modes
-        _ => (true, false, false),              // Default fallback
+        "minimal" => (true, false, false),   // Basic mutations only
+        "default" => (true, false, false),   // Smart fuzzing (mutations)
+        "aggressive" => (true, true, false), // Smart + params
+        "full" => (true, true, true),        // All modes
+        _ => (true, false, false),           // Default fallback
     };
 
     // Configure fuzzer based on level

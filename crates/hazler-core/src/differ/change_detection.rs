@@ -362,7 +362,7 @@ mod tests {
 
         let significant = detector.filter_significant(changes);
         // At least one should be significant
-        assert!(significant.len() >= 1);
+        assert!(!significant.is_empty());
     }
 
     #[test]

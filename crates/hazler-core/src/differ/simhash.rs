@@ -211,7 +211,7 @@ mod tests {
         let hash1 = SimHash::new(0);
         let hash2 = SimHash::new(u64::MAX);
         let similarity = hash1.similarity(&hash2);
-        assert!(similarity >= 0.0 && similarity <= 1.0);
+        assert!((0.0..=1.0).contains(&similarity));
     }
 
     #[test]

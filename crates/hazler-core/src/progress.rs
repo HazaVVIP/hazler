@@ -251,8 +251,10 @@ mod tests {
 
     #[test]
     fn test_percentage_calculation() {
-        let mut stats = ProgressStats::default();
-        stats.urls_visited = 50;
+        let stats = ProgressStats {
+            urls_visited: 50,
+            ..Default::default()
+        };
 
         assert_eq!(stats.percentage(100), Some(50.0));
         assert_eq!(stats.percentage(200), Some(25.0));
@@ -261,9 +263,11 @@ mod tests {
 
     #[test]
     fn test_crawl_rate_calculation() {
-        let mut stats = ProgressStats::default();
-        stats.start_time = Some(Instant::now() - Duration::from_secs(10));
-        stats.urls_visited = 20;
+        let mut stats = ProgressStats {
+            start_time: Some(Instant::now() - Duration::from_secs(10)),
+            urls_visited: 20,
+            ..Default::default()
+        };
 
         stats.update_rate();
         assert!(stats.crawl_rate > 1.5 && stats.crawl_rate < 2.5); // ~2.0 pages/sec
@@ -297,9 +301,11 @@ mod tests {
 
     #[test]
     fn test_eta_estimation() {
-        let mut stats = ProgressStats::default();
-        stats.start_time = Some(Instant::now() - Duration::from_secs(10));
-        stats.urls_visited = 20;
+        let mut stats = ProgressStats {
+            start_time: Some(Instant::now() - Duration::from_secs(10)),
+            urls_visited: 20,
+            ..Default::default()
+        };
         stats.update_rate();
 
         stats.estimate_eta(100);

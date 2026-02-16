@@ -321,8 +321,10 @@ mod tests {
 
     #[test]
     fn test_max_mutations_limit() {
-        let mut config = FuzzerConfig::default();
-        config.max_mutations = 5;
+        let config = FuzzerConfig {
+            max_mutations: 5,
+            ..FuzzerConfig::default()
+        };
         let mutator = UrlMutator::new(config);
         let url = Url::parse("https://api.example.com/user").unwrap();
 

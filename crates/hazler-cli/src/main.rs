@@ -73,6 +73,7 @@ struct Args {
     /// Export results in various formats
     /// Format: TYPE:FILE where TYPE can be summary, html, pdf, sqlite, openapi, or postman
     /// Can be specified multiple times for multiple exports
+    ///
     /// Examples:
     ///   --export html:report.html
     ///   --export pdf:report.pdf --export sqlite:data.db
@@ -85,6 +86,7 @@ struct Args {
     /// - Slack: hooks.slack.com
     /// - Discord: discord.com/api/webhooks
     /// - Generic: all other URLs
+    ///
     /// Examples:
     ///   --webhook https://hooks.slack.com/services/...
     ///   --webhook https://discord.com/api/webhooks/...
@@ -149,6 +151,7 @@ struct Args {
     /// - strict: Only the exact domain (no subdomains)
     /// - same-domain: Same domain without subdomains (default)
     /// - subdomains: Include all subdomains
+    ///
     /// Examples:
     ///   --scope strict  (example.com only, not sub.example.com)
     ///   --scope subdomains  (example.com and sub.example.com)
@@ -197,6 +200,7 @@ struct Args {
     ///   - default: Smart fuzzing (URL mutations)
     ///   - aggressive: Smart + parameter discovery
     ///   - full: All fuzzing modes (mutations + parameters + endpoints)
+    ///
     /// Example: --fuzz --fuzz-level aggressive
     #[arg(long, default_value = "default")]
     fuzz_level: String,
@@ -271,11 +275,13 @@ struct Args {
     ///   - bearer:token
     ///   - apikey:key
     ///   - cookie:name=value
+    ///
     /// Examples:
-    ///   --auth basic:admin:secretpass
-    ///   --auth bearer:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-    ///   --auth apikey:your-api-key-here
-    ///   --auth cookie:session=abc123
+    ///     --auth basic:admin:secretpass
+    ///     --auth bearer:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    ///     --auth apikey:your-api-key-here
+    ///     --auth cookie:session=abc123
+    ///
     /// Can be repeated for multiple auth mechanisms
     #[arg(long, value_name = "METHOD:VALUE")]
     auth: Vec<String>,
@@ -297,7 +303,7 @@ struct ExportSpec {
 /// Parse export specifications from command line arguments
 fn parse_export_specs(export_args: &[String]) -> Result<Vec<ExportSpec>, String> {
     let mut specs = Vec::new();
-    
+
     for arg in export_args {
         let parts: Vec<&str> = arg.splitn(2, ':').collect();
         if parts.len() != 2 {
@@ -306,10 +312,10 @@ fn parse_export_specs(export_args: &[String]) -> Result<Vec<ExportSpec>, String>
                 arg
             ));
         }
-        
+
         let export_type = parts[0].trim().to_lowercase();
         let file_path = parts[1].trim().to_string();
-        
+
         // Validate export type
         match export_type.as_str() {
             "summary" | "html" | "pdf" | "sqlite" | "openapi" | "postman" => {
@@ -326,7 +332,7 @@ fn parse_export_specs(export_args: &[String]) -> Result<Vec<ExportSpec>, String>
             }
         }
     }
-    
+
     Ok(specs)
 }
 
@@ -341,9 +347,9 @@ enum WebhookType {
 /// Domain scoping mode for crawling
 #[derive(Debug, Clone, PartialEq)]
 enum ScopeMode {
-    Strict,        // Only exact domain
-    SameDomain,    // Same domain (default, no subdomains)
-    Subdomains,    // Include all subdomains
+    Strict,     // Only exact domain
+    SameDomain, // Same domain (default, no subdomains)
+    Subdomains, // Include all subdomains
 }
 
 /// Clustering configuration mode
@@ -351,8 +357,8 @@ enum ScopeMode {
 enum ClusterMode {
     Off,
     Auto,
-    KMeans(usize),           // K-means with N clusters
-    DBSCAN(f64, usize),      // DBSCAN with epsilon and min_points
+    KMeans(usize),      // K-means with N clusters
+    Dbscan(f64, usize), // DBSCAN with epsilon and min_points
 }
 
 /// Detect webhook type from URL pattern
@@ -395,15 +401,15 @@ fn parse_scope_mode(scope_str: &str) -> Result<ScopeMode, String> {
 /// Parse cluster mode from string
 fn parse_cluster_mode(cluster_str: &str) -> Result<ClusterMode, String> {
     let lower = cluster_str.to_lowercase();
-    
+
     if lower == "off" {
         return Ok(ClusterMode::Off);
     }
-    
+
     if lower == "auto" {
         return Ok(ClusterMode::Auto);
     }
-    
+
     // Parse kmeans:N format
     if lower.starts_with("kmeans:") {
         let parts: Vec<&str> = lower.split(':').collect();
@@ -415,7 +421,7 @@ fn parse_cluster_mode(cluster_str: &str) -> Result<ClusterMode, String> {
             }
         }
     }
-    
+
     // Parse dbscan:epsilon,minpts format
     if lower.starts_with("dbscan:") {
         let parts: Vec<&str> = lower.split(':').collect();
@@ -424,14 +430,14 @@ fn parse_cluster_mode(cluster_str: &str) -> Result<ClusterMode, String> {
             if params.len() == 2 {
                 match (params[0].parse::<f64>(), params[1].parse::<usize>()) {
                     (Ok(epsilon), Ok(min_pts)) if epsilon > 0.0 && min_pts > 0 => {
-                        return Ok(ClusterMode::DBSCAN(epsilon, min_pts));
+                        return Ok(ClusterMode::Dbscan(epsilon, min_pts));
                     }
                     _ => return Err(format!("Invalid DBSCAN parameters: '{}'", parts[1])),
                 }
             }
         }
     }
-    
+
     Err(format!(
         "Invalid cluster mode: '{}'. Supported: off, auto, kmeans:N, dbscan:epsilon,minpts",
         cluster_str
@@ -457,7 +463,10 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
     // For simplicity, we only support one auth method at a time from CLI
     // Complex scenarios should use --auth-file
     if args.auth.len() > 1 {
-        return Err("Multiple --auth specifications not supported. For complex auth, use --auth-file".to_string());
+        return Err(
+            "Multiple --auth specifications not supported. For complex auth, use --auth-file"
+                .to_string(),
+        );
     }
 
     let auth_spec = &args.auth[0];
@@ -652,7 +661,7 @@ async fn main() {
             process::exit(1);
         }
     };
-    
+
     match scope_mode {
         ScopeMode::Strict => {
             config = config.strict_domain(true);
@@ -769,11 +778,7 @@ async fn main() {
         discovered_urls.dedup();
 
         // Apply fuzzing
-        let fuzzed_urls = apply_fuzzing(
-            &discovered_urls,
-            args.fuzz,
-            &args.fuzz_level,
-        );
+        let fuzzed_urls = apply_fuzzing(&discovered_urls, args.fuzz, &args.fuzz_level);
 
         // Note: In a real implementation, you would crawl these fuzzed URLs
         // For now, we just report them
@@ -796,11 +801,17 @@ async fn main() {
             }
         };
 
-        let (enable_clustering, clustering_algorithm, num_clusters, dbscan_epsilon, dbscan_min_points) = match cluster_mode {
+        let (
+            enable_clustering,
+            clustering_algorithm,
+            num_clusters,
+            dbscan_epsilon,
+            dbscan_min_points,
+        ) = match cluster_mode {
             ClusterMode::Off => (false, String::from("kmeans"), 5, 0.3, 2),
-            ClusterMode::Auto => (true, String::from("kmeans"), 5, 0.3, 2),  // Auto defaults to kmeans
+            ClusterMode::Auto => (true, String::from("kmeans"), 5, 0.3, 2), // Auto defaults to kmeans
             ClusterMode::KMeans(n) => (true, String::from("kmeans"), n, 0.3, 2),
-            ClusterMode::DBSCAN(eps, min_pts) => (true, String::from("dbscan"), 5, eps, min_pts),
+            ClusterMode::Dbscan(eps, min_pts) => (true, String::from("dbscan"), 5, eps, min_pts),
         };
 
         let diff_config = DifferConfig {
@@ -930,7 +941,7 @@ async fn main() {
                     let clusterer = KMeansClusterer::new(n);
                     clusterer.cluster(&responses)
                 }
-                ClusterMode::DBSCAN(epsilon, min_pts) => {
+                ClusterMode::Dbscan(epsilon, min_pts) => {
                     let clusterer = DBSCANClusterer::new(epsilon, min_pts);
                     clusterer.cluster(&responses)
                 }
@@ -939,7 +950,7 @@ async fn main() {
                     let clusterer = KMeansClusterer::new(5);
                     clusterer.cluster(&responses)
                 }
-                ClusterMode::Off => Vec::new(),  // Should not reach here
+                ClusterMode::Off => Vec::new(), // Should not reach here
             };
 
             for cluster in &clusters {
@@ -977,15 +988,9 @@ async fn main() {
 
         // Send to appropriate webhook based on type
         let send_result = match webhook_type {
-            WebhookType::Slack => {
-                webhook::send_to_slack(&result, webhook_url).await
-            }
-            WebhookType::Discord => {
-                webhook::send_to_discord(&result, webhook_url).await
-            }
-            WebhookType::Generic => {
-                webhook::send_to_webhook(&result, webhook_url).await
-            }
+            WebhookType::Slack => webhook::send_to_slack(&result, webhook_url).await,
+            WebhookType::Discord => webhook::send_to_discord(&result, webhook_url).await,
+            WebhookType::Generic => webhook::send_to_webhook(&result, webhook_url).await,
         };
 
         match send_result {
@@ -1030,8 +1035,10 @@ async fn main() {
                             }
                         }
                         "html" => {
-                            match generate_html_report(&result, std::path::Path::new(&spec.file_path))
-                            {
+                            match generate_html_report(
+                                &result,
+                                std::path::Path::new(&spec.file_path),
+                            ) {
                                 Ok(_) => {
                                     eprintln!(
                                         "{} HTML report generated: {}",
@@ -1045,8 +1052,10 @@ async fn main() {
                             }
                         }
                         "pdf" => {
-                            match generate_pdf_report(&result, std::path::Path::new(&spec.file_path))
-                            {
+                            match generate_pdf_report(
+                                &result,
+                                std::path::Path::new(&spec.file_path),
+                            ) {
                                 Ok(_) => {
                                     eprintln!(
                                         "{} PDF report generated: {}",
@@ -1135,7 +1144,26 @@ async fn main() {
                     println!("{}", line);
                 }
             }
-            Err(_e) => {
+            Err(_e) => {}
+        },
+        "urls" => {
+            println!("{}", formatter.format_urls(&result));
+        }
+        "csv" => {
+            println!("{}", formatter.format_csv(&result));
+        }
+        "tree" => {
+            println!("{}", formatter.format_tree(&result));
+        }
+        "nuclei" => match formatter.format_nuclei(&result) {
+            Ok(lines) => {
+                for line in lines {
+                    println!("{}", line);
+                }
+            }
+            Err(e) => {
+                error!("Failed to serialize nuclei results: {}", e);
+                process::exit(1);
             }
         },
         "ffuf" => match formatter.format_ffuf(&result) {
@@ -1169,57 +1197,57 @@ async fn main() {
 
     // Print summary to stderr (always shown after results output)
     eprintln!("\n{}", "═".repeat(80).bright_blue());
-        eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
-        eprintln!("{}", "═".repeat(80).bright_blue());
-        eprintln!(
-            "{} {}",
-            "Total pages crawled:".bright_white(),
-            result.total_pages.to_string().green().bold()
-        );
-        eprintln!(
-            "{} {}",
-            "Total URLs discovered:".bright_white(),
-            result.total_urls.to_string().cyan().bold()
-        );
-        eprintln!(
-            "{} {}",
-            "Errors encountered:".bright_white(),
-            if !result.errors.is_empty() {
-                result.errors.len().to_string().red().bold()
-            } else {
-                result.errors.len().to_string().green().bold()
-            }
-        );
+    eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
+    eprintln!("{}", "═".repeat(80).bright_blue());
+    eprintln!(
+        "{} {}",
+        "Total pages crawled:".bright_white(),
+        result.total_pages.to_string().green().bold()
+    );
+    eprintln!(
+        "{} {}",
+        "Total URLs discovered:".bright_white(),
+        result.total_urls.to_string().cyan().bold()
+    );
+    eprintln!(
+        "{} {}",
+        "Errors encountered:".bright_white(),
+        if !result.errors.is_empty() {
+            result.errors.len().to_string().red().bold()
+        } else {
+            result.errors.len().to_string().green().bold()
+        }
+    );
 
-        // Show secrets summary if any found
-        if let Some(ref stats) = result.secret_findings {
-            if stats.total > 0 {
-                eprintln!(
-                    "\n{} {}",
-                    "🔒 Secrets found:".bright_red().bold(),
-                    stats.total.to_string().bright_red().bold()
-                );
-                if stats.critical > 0 {
-                    eprintln!("  {} {}", "Critical:".red(), stats.critical);
-                }
-                if stats.high > 0 {
-                    eprintln!("  {} {}", "High:".yellow(), stats.high);
-                }
-                if stats.medium > 0 {
-                    eprintln!("  {} {}", "Medium:".yellow(), stats.medium);
-                }
-                if stats.low > 0 {
-                    eprintln!("  {} {}", "Low:".cyan(), stats.low);
-                }
+    // Show secrets summary if any found
+    if let Some(ref stats) = result.secret_findings {
+        if stats.total > 0 {
+            eprintln!(
+                "\n{} {}",
+                "🔒 Secrets found:".bright_red().bold(),
+                stats.total.to_string().bright_red().bold()
+            );
+            if stats.critical > 0 {
+                eprintln!("  {} {}", "Critical:".red(), stats.critical);
+            }
+            if stats.high > 0 {
+                eprintln!("  {} {}", "High:".yellow(), stats.high);
+            }
+            if stats.medium > 0 {
+                eprintln!("  {} {}", "Medium:".yellow(), stats.medium);
+            }
+            if stats.low > 0 {
+                eprintln!("  {} {}", "Low:".cyan(), stats.low);
             }
         }
+    }
 
-        if !result.errors.is_empty() && args.verbose {
-            eprintln!("\n{}", "⚠️  ERRORS".yellow().bold());
-            for error in &result.errors {
-                eprintln!("  {} {}", "•".red(), error);
-            }
+    if !result.errors.is_empty() && args.verbose {
+        eprintln!("\n{}", "⚠️  ERRORS".yellow().bold());
+        for error in &result.errors {
+            eprintln!("  {} {}", "•".red(), error);
         }
+    }
 
-        eprintln!("{}\n", "═".repeat(80).bright_blue());
+    eprintln!("{}\n", "═".repeat(80).bright_blue());
 }

@@ -352,7 +352,6 @@ impl Browser {
 }
 
 #[cfg(test)]
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -367,7 +366,7 @@ mod tests {
     #[test]
     fn test_browser_config_default() {
         let config = BrowserConfig::default();
-        assert_eq!(config.headless, true);
+        assert!(config.headless);
         assert_eq!(config.timeout_secs, 30);
         assert_eq!(config.window_width, 1920);
         assert_eq!(config.window_height, 1080);

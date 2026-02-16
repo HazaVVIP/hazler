@@ -1,7 +1,7 @@
 use clap::Parser;
 use colored::Colorize;
 use hazler_core::{Config, Crawler};
-use hazler_http::{ApiKeyLocation, AuthConfig, AuthMethod, FormAuth};
+use hazler_http::{ApiKeyLocation, AuthConfig, AuthMethod};
 use std::collections::HashMap;
 use std::fs;
 use std::process;
@@ -9,7 +9,7 @@ use tracing::{error, info, Level};
 use url::Url;
 
 mod output;
-use output::{generate_report, generate_stats, OutputFormatter};
+use output::{generate_report, OutputFormatter};
 
 mod html_report;
 use html_report::generate_html_report;
@@ -70,55 +70,33 @@ struct Args {
     #[arg(long)]
     fields: Option<String>,
 
-    /// Show crawl statistics
-    #[arg(long)]
-    stats: bool,
+    /// Export results in various formats
+    /// Format: TYPE:FILE where TYPE can be summary, html, pdf, sqlite, openapi, or postman
+    /// Can be specified multiple times for multiple exports
+    /// Examples:
+    ///   --export html:report.html
+    ///   --export pdf:report.pdf --export sqlite:data.db
+    ///   --export summary:summary.txt
+    #[arg(long, value_name = "TYPE:FILE")]
+    export: Vec<String>,
 
-    /// Generate summary report
-    #[arg(long)]
-    report: bool,
-
-    /// Generate HTML report and save to file
-    /// Creates a comprehensive HTML report with visualizations
-    /// Example: --html-report report.html
-    #[arg(long, value_name = "FILE")]
-    html_report: Option<String>,
-
-    /// Generate PDF report and save to file
-    /// Creates a PDF report with summary statistics
-    /// Example: --pdf-report report.pdf
-    #[arg(long, value_name = "FILE")]
-    pdf_report: Option<String>,
-
-    /// Export results to SQLite database
-    /// Example: --export-sqlite crawl.db
-    #[arg(long, value_name = "FILE")]
-    export_sqlite: Option<String>,
-
-    /// Export as OpenAPI/Swagger specification
-    /// Example: --export-openapi swagger.json
-    #[arg(long, value_name = "FILE")]
-    export_openapi: Option<String>,
-
-    /// Export as Postman collection
-    /// Example: --export-postman collection.json
-    #[arg(long, value_name = "FILE")]
-    export_postman: Option<String>,
-
-    /// Send results to Slack webhook
-    /// Example: --webhook-slack https://hooks.slack.com/services/...
+    /// Send results to webhook
+    /// Webhook type is auto-detected from URL pattern:
+    /// - Slack: hooks.slack.com
+    /// - Discord: discord.com/api/webhooks
+    /// - Generic: all other URLs
+    /// Examples:
+    ///   --webhook https://hooks.slack.com/services/...
+    ///   --webhook https://discord.com/api/webhooks/...
+    ///   --webhook https://example.com/webhook --webhook-type generic
     #[arg(long, value_name = "URL")]
-    webhook_slack: Option<String>,
+    webhook: Option<String>,
 
-    /// Send results to Discord webhook
-    /// Example: --webhook-discord https://discord.com/api/webhooks/...
-    #[arg(long, value_name = "URL")]
-    webhook_discord: Option<String>,
-
-    /// Send results to generic webhook (JSON payload)
-    /// Example: --webhook-url https://example.com/webhook
-    #[arg(long, value_name = "URL")]
-    webhook_url: Option<String>,
+    /// Webhook type (optional, auto-detected by default)
+    /// Options: slack, discord, generic
+    /// Only needed if auto-detection fails or you want to override
+    #[arg(long, value_name = "TYPE")]
+    webhook_type: Option<String>,
 
     /// Verbose output
     #[arg(short = 'v', long)]
@@ -140,6 +118,7 @@ struct Args {
     /// - Secret and sensitive data scanning
     /// - Framework detection
     /// - API endpoint mapping
+    /// - GraphQL introspection
     /// - Comprehensive reporting
     #[arg(long)]
     all: bool,
@@ -165,17 +144,16 @@ struct Args {
     #[arg(long)]
     proxy: Option<String>,
 
-    /// Enable strict domain mode - only crawl the exact domain (no subdomains)
-    /// When enabled, only the exact domain specified in the URL will be crawled
-    /// Example: If URL is example.com, sub.example.com will be excluded
-    #[arg(long)]
-    strict_domain: bool,
-
-    /// Allow subdomains - permits crawling of all subdomains of the target domain
-    /// Example: If URL is example.com, also crawl sub.example.com, api.example.com, etc.
-    /// Note: This is ignored if --strict-domain is enabled
-    #[arg(long)]
-    subs: bool,
+    /// Domain crawling scope
+    /// Controls which domains are crawled:
+    /// - strict: Only the exact domain (no subdomains)
+    /// - same-domain: Same domain without subdomains (default)
+    /// - subdomains: Include all subdomains
+    /// Examples:
+    ///   --scope strict  (example.com only, not sub.example.com)
+    ///   --scope subdomains  (example.com and sub.example.com)
+    #[arg(long, default_value = "same-domain", value_name = "MODE")]
+    scope: String,
 
     /// Enable headless browser for JavaScript-heavy sites (SPAs)
     /// Uses Chrome/Chromium via CDP to render pages with JavaScript
@@ -207,24 +185,19 @@ struct Args {
     no_source_maps: bool,
 
     /// Enable smart fuzzing mode
-    /// Automatically generates URL variations to discover hidden endpoints:
-    /// - Pluralization (user -> users)
-    /// - File extensions (.json, .xml, .php)
-    /// - API versioning (v1, v2, v3)
+    /// Automatically generates URL variations to discover hidden endpoints
+    /// Use with --fuzz-level to control fuzzing behavior
     #[arg(long)]
     fuzz: bool,
 
-    /// Enable parameter discovery fuzzing
-    /// Tests common parameter names on discovered endpoints
-    #[arg(long)]
-    fuzz_params: bool,
-
-    /// Enable endpoint fuzzing with wordlists
-    /// Tests common endpoint paths and variations
-    #[arg(long)]
-    fuzz_endpoints: bool,
-
-    /// Fuzzing aggressiveness level (minimal, default, aggressive)
+    /// Fuzzing level and mode
+    /// Levels:
+    ///   - off: No fuzzing
+    ///   - minimal: Basic variations only
+    ///   - default: Smart fuzzing (URL mutations)
+    ///   - aggressive: Smart + parameter discovery
+    ///   - full: All fuzzing modes (mutations + parameters + endpoints)
+    /// Example: --fuzz --fuzz-level aggressive
     #[arg(long, default_value = "default")]
     fuzz_level: String,
 
@@ -245,18 +218,15 @@ struct Args {
     #[arg(long, default_value = "0.85")]
     diff_threshold: f64,
 
-    /// Enable response clustering
-    /// Groups similar responses together using K-means or DBSCAN
-    #[arg(long)]
-    cluster_responses: bool,
-
-    /// Clustering algorithm (kmeans or dbscan)
-    #[arg(long, default_value = "kmeans")]
-    cluster_algorithm: String,
-
-    /// Number of clusters for K-means
-    #[arg(long, default_value = "5")]
-    num_clusters: usize,
+    /// Response clustering configuration
+    /// Format: off|auto|kmeans:N|dbscan:epsilon,minpts
+    /// Examples:
+    ///   --cluster off (disable clustering)
+    ///   --cluster auto (automatic algorithm selection)
+    ///   --cluster kmeans:10 (K-means with 10 clusters)
+    ///   --cluster dbscan:0.3,2 (DBSCAN with epsilon=0.3, min_points=2)
+    #[arg(long, default_value = "off", value_name = "MODE")]
+    cluster: String,
 
     /// Resume from saved state file
     /// Continues crawling from where it was left off
@@ -294,78 +264,183 @@ struct Args {
     progress: u64,
 
     // ===== Authentication Options =====
-    /// Basic Auth credentials (username:password)
-    /// Example: --auth-basic "user:pass"
-    #[arg(long, value_name = "CREDENTIALS")]
-    auth_basic: Option<String>,
-
-    /// Bearer token for authentication
-    /// Example: --auth-bearer "eyJhbGc..."
-    #[arg(long, value_name = "TOKEN")]
-    auth_bearer: Option<String>,
-
-    /// Cookie for authentication (name=value format, can be repeated)
-    /// Example: --auth-cookie "session=abc123"
-    #[arg(long, value_name = "COOKIE")]
-    auth_cookie: Vec<String>,
-
-    /// Custom header for authentication (Name:Value format)
-    /// Example: --auth-header "X-API-Key:secret"
-    #[arg(long, value_name = "HEADER")]
-    auth_header: Option<String>,
-
-    /// API key for authentication
-    /// Example: --auth-apikey "your-api-key"
-    #[arg(long, value_name = "KEY")]
-    auth_apikey: Option<String>,
-
-    /// API key location (header, query, or cookie)
-    /// Default: header
-    #[arg(long, default_value = "header")]
-    auth_apikey_location: String,
-
-    /// API key name (header/param/cookie name)
-    /// Default: X-API-Key
-    #[arg(long, default_value = "X-API-Key")]
-    auth_apikey_name: String,
-
-    /// OAuth2 access token
-    /// Example: --auth-oauth "access-token"
-    #[arg(long, value_name = "TOKEN")]
-    auth_oauth: Option<String>,
+    /// Authentication configuration
+    /// Format: METHOD:VALUE
+    /// Supported methods:
+    ///   - basic:username:password
+    ///   - bearer:token
+    ///   - apikey:key
+    ///   - cookie:name=value
+    /// Examples:
+    ///   --auth basic:admin:secretpass
+    ///   --auth bearer:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    ///   --auth apikey:your-api-key-here
+    ///   --auth cookie:session=abc123
+    /// Can be repeated for multiple auth mechanisms
+    #[arg(long, value_name = "METHOD:VALUE")]
+    auth: Vec<String>,
 
     /// Load authentication configuration from JSON file
+    /// For complex authentication (form auth, OAuth2, custom headers)
     /// Example: --auth-file credentials.json
     #[arg(long, value_name = "FILE")]
     auth_file: Option<String>,
+}
 
-    /// Form-based login URL
-    /// Example: --auth-form-url "https://example.com/login"
-    #[arg(long, value_name = "URL")]
-    auth_form_url: Option<String>,
+/// Export specification parsed from TYPE:FILE format
+#[derive(Debug, Clone)]
+struct ExportSpec {
+    export_type: String,
+    file_path: String,
+}
 
-    /// Form username field name
-    /// Default: username
-    #[arg(long, default_value = "username")]
-    auth_form_user_field: String,
+/// Parse export specifications from command line arguments
+fn parse_export_specs(export_args: &[String]) -> Result<Vec<ExportSpec>, String> {
+    let mut specs = Vec::new();
+    
+    for arg in export_args {
+        let parts: Vec<&str> = arg.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            return Err(format!(
+                "Invalid export format: '{}'. Expected format: TYPE:FILE",
+                arg
+            ));
+        }
+        
+        let export_type = parts[0].trim().to_lowercase();
+        let file_path = parts[1].trim().to_string();
+        
+        // Validate export type
+        match export_type.as_str() {
+            "summary" | "html" | "pdf" | "sqlite" | "openapi" | "postman" => {
+                specs.push(ExportSpec {
+                    export_type,
+                    file_path,
+                });
+            }
+            _ => {
+                return Err(format!(
+                    "Unknown export type: '{}'. Supported types: summary, html, pdf, sqlite, openapi, postman",
+                    export_type
+                ));
+            }
+        }
+    }
+    
+    Ok(specs)
+}
 
-    /// Form password field name
-    /// Default: password
-    #[arg(long, default_value = "password")]
-    auth_form_pass_field: String,
+/// Webhook type for different webhook integrations
+#[derive(Debug, Clone, PartialEq)]
+enum WebhookType {
+    Slack,
+    Discord,
+    Generic,
+}
 
-    /// Form username value
-    #[arg(long, value_name = "USERNAME")]
-    auth_form_username: Option<String>,
+/// Domain scoping mode for crawling
+#[derive(Debug, Clone, PartialEq)]
+enum ScopeMode {
+    Strict,        // Only exact domain
+    SameDomain,    // Same domain (default, no subdomains)
+    Subdomains,    // Include all subdomains
+}
 
-    /// Form password value
-    #[arg(long, value_name = "PASSWORD")]
-    auth_form_password: Option<String>,
+/// Clustering configuration mode
+#[derive(Debug, Clone, PartialEq)]
+enum ClusterMode {
+    Off,
+    Auto,
+    KMeans(usize),           // K-means with N clusters
+    DBSCAN(f64, usize),      // DBSCAN with epsilon and min_points
+}
+
+/// Detect webhook type from URL pattern
+fn detect_webhook_type(url: &str) -> WebhookType {
+    if url.contains("hooks.slack.com") {
+        WebhookType::Slack
+    } else if url.contains("discord.com/api/webhooks") {
+        WebhookType::Discord
+    } else {
+        WebhookType::Generic
+    }
+}
+
+/// Parse webhook type from string
+fn parse_webhook_type(type_str: &str) -> Result<WebhookType, String> {
+    match type_str.to_lowercase().as_str() {
+        "slack" => Ok(WebhookType::Slack),
+        "discord" => Ok(WebhookType::Discord),
+        "generic" => Ok(WebhookType::Generic),
+        _ => Err(format!(
+            "Unknown webhook type: '{}'. Supported types: slack, discord, generic",
+            type_str
+        )),
+    }
+}
+
+/// Parse scope mode from string
+fn parse_scope_mode(scope_str: &str) -> Result<ScopeMode, String> {
+    match scope_str.to_lowercase().as_str() {
+        "strict" => Ok(ScopeMode::Strict),
+        "same-domain" | "same_domain" => Ok(ScopeMode::SameDomain),
+        "subdomains" | "subs" => Ok(ScopeMode::Subdomains),
+        _ => Err(format!(
+            "Unknown scope mode: '{}'. Supported modes: strict, same-domain, subdomains",
+            scope_str
+        )),
+    }
+}
+
+/// Parse cluster mode from string
+fn parse_cluster_mode(cluster_str: &str) -> Result<ClusterMode, String> {
+    let lower = cluster_str.to_lowercase();
+    
+    if lower == "off" {
+        return Ok(ClusterMode::Off);
+    }
+    
+    if lower == "auto" {
+        return Ok(ClusterMode::Auto);
+    }
+    
+    // Parse kmeans:N format
+    if lower.starts_with("kmeans:") {
+        let parts: Vec<&str> = lower.split(':').collect();
+        if parts.len() == 2 {
+            match parts[1].parse::<usize>() {
+                Ok(n) if n > 0 => return Ok(ClusterMode::KMeans(n)),
+                Ok(_) => return Err("Number of clusters must be > 0".to_string()),
+                Err(_) => return Err(format!("Invalid number of clusters: '{}'", parts[1])),
+            }
+        }
+    }
+    
+    // Parse dbscan:epsilon,minpts format
+    if lower.starts_with("dbscan:") {
+        let parts: Vec<&str> = lower.split(':').collect();
+        if parts.len() == 2 {
+            let params: Vec<&str> = parts[1].split(',').collect();
+            if params.len() == 2 {
+                match (params[0].parse::<f64>(), params[1].parse::<usize>()) {
+                    (Ok(epsilon), Ok(min_pts)) if epsilon > 0.0 && min_pts > 0 => {
+                        return Ok(ClusterMode::DBSCAN(epsilon, min_pts));
+                    }
+                    _ => return Err(format!("Invalid DBSCAN parameters: '{}'", parts[1])),
+                }
+            }
+        }
+    }
+    
+    Err(format!(
+        "Invalid cluster mode: '{}'. Supported: off, auto, kmeans:N, dbscan:epsilon,minpts",
+        cluster_str
+    ))
 }
 
 /// Build authentication configuration from CLI arguments
 fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
-    // Load from file if provided
+    // Load from file if provided (takes priority)
     if let Some(ref auth_file) = args.auth_file {
         let content = fs::read_to_string(auth_file)
             .map_err(|e| format!("Failed to read auth file: {}", e))?;
@@ -374,134 +449,77 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
         return Ok(Some(config));
     }
 
-    // Build from CLI arguments
-    let mut auth_method = None;
-
-    // Check for Basic Auth
-    if let Some(ref creds) = args.auth_basic {
-        let parts: Vec<&str> = creds.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err("Basic auth must be in format username:password".to_string());
-        }
-        auth_method = Some(AuthMethod::Basic {
-            username: parts[0].to_string(),
-            password: parts[1].to_string(),
-        });
+    // Parse auth specifications from CLI
+    if args.auth.is_empty() {
+        return Ok(None);
     }
 
-    // Check for Bearer Token
-    if let Some(ref token) = args.auth_bearer {
-        if auth_method.is_some() {
-            return Err(
-                "Multiple authentication methods specified. Please use only one.".to_string(),
-            );
-        }
-        auth_method = Some(AuthMethod::Bearer {
-            token: token.clone(),
-        });
+    // For simplicity, we only support one auth method at a time from CLI
+    // Complex scenarios should use --auth-file
+    if args.auth.len() > 1 {
+        return Err("Multiple --auth specifications not supported. For complex auth, use --auth-file".to_string());
     }
 
-    // Check for Cookie Auth
-    if !args.auth_cookie.is_empty() {
-        if auth_method.is_some() {
-            return Err(
-                "Multiple authentication methods specified. Please use only one.".to_string(),
-            );
-        }
-        let mut cookies = HashMap::new();
-        for cookie in &args.auth_cookie {
-            let parts: Vec<&str> = cookie.splitn(2, '=').collect();
-            if parts.len() != 2 {
-                return Err(format!("Invalid cookie format: {}. Use name=value", cookie));
+    let auth_spec = &args.auth[0];
+    let auth_method = parse_auth_spec(auth_spec)?;
+
+    Ok(Some(AuthConfig::new(auth_method)))
+}
+
+/// Parse authentication specification from METHOD:VALUE format
+fn parse_auth_spec(spec: &str) -> Result<AuthMethod, String> {
+    let parts: Vec<&str> = spec.splitn(2, ':').collect();
+    if parts.len() < 2 {
+        return Err(format!(
+            "Invalid auth format: '{}'. Expected METHOD:VALUE",
+            spec
+        ));
+    }
+
+    let method = parts[0].to_lowercase();
+    let value = parts[1];
+
+    match method.as_str() {
+        "basic" => {
+            // Format: basic:username:password
+            let cred_parts: Vec<&str> = value.splitn(2, ':').collect();
+            if cred_parts.len() != 2 {
+                return Err("Basic auth must be in format basic:username:password".to_string());
             }
-            cookies.insert(parts[0].to_string(), parts[1].to_string());
+            Ok(AuthMethod::Basic {
+                username: cred_parts[0].to_string(),
+                password: cred_parts[1].to_string(),
+            })
         }
-        auth_method = Some(AuthMethod::Cookie { cookies });
-    }
-
-    // Check for Custom Header
-    if let Some(ref header) = args.auth_header {
-        if auth_method.is_some() {
-            return Err(
-                "Multiple authentication methods specified. Please use only one.".to_string(),
-            );
+        "bearer" => {
+            // Format: bearer:token
+            Ok(AuthMethod::Bearer {
+                token: value.to_string(),
+            })
         }
-        let parts: Vec<&str> = header.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err("Custom header must be in format Name:Value".to_string());
+        "apikey" => {
+            // Format: apikey:key
+            // Uses default location (header) and name (X-API-Key)
+            Ok(AuthMethod::ApiKey {
+                key: value.to_string(),
+                location: ApiKeyLocation::Header,
+                name: "X-API-Key".to_string(),
+            })
         }
-        auth_method = Some(AuthMethod::Header {
-            name: parts[0].to_string(),
-            value: parts[1].to_string(),
-        });
-    }
-
-    // Check for API Key
-    if let Some(ref key) = args.auth_apikey {
-        if auth_method.is_some() {
-            return Err(
-                "Multiple authentication methods specified. Please use only one.".to_string(),
-            );
+        "cookie" => {
+            // Format: cookie:name=value
+            let cookie_parts: Vec<&str> = value.splitn(2, '=').collect();
+            if cookie_parts.len() != 2 {
+                return Err("Cookie must be in format cookie:name=value".to_string());
+            }
+            let mut cookies = HashMap::new();
+            cookies.insert(cookie_parts[0].to_string(), cookie_parts[1].to_string());
+            Ok(AuthMethod::Cookie { cookies })
         }
-        let location = match args.auth_apikey_location.to_lowercase().as_str() {
-            "header" => ApiKeyLocation::Header,
-            "query" => ApiKeyLocation::Query,
-            "cookie" => ApiKeyLocation::Cookie,
-            _ => return Err("API key location must be: header, query, or cookie".to_string()),
-        };
-        auth_method = Some(AuthMethod::ApiKey {
-            key: key.clone(),
-            location,
-            name: args.auth_apikey_name.clone(),
-        });
-    }
-
-    // Check for OAuth2
-    if let Some(ref token) = args.auth_oauth {
-        if auth_method.is_some() {
-            return Err(
-                "Multiple authentication methods specified. Please use only one.".to_string(),
-            );
-        }
-        auth_method = Some(AuthMethod::OAuth2 {
-            access_token: token.clone(),
-            token_type: Some("Bearer".to_string()),
-            refresh_token: None,
-            expires_in: None,
-        });
-    }
-
-    // Build form auth if provided
-    let form_auth = if let Some(ref url) = args.auth_form_url {
-        if args.auth_form_username.is_none() || args.auth_form_password.is_none() {
-            return Err(
-                "Form auth requires --auth-form-username and --auth-form-password".to_string(),
-            );
-        }
-        Some(FormAuth {
-            login_url: url.clone(),
-            username_field: args.auth_form_user_field.clone(),
-            password_field: args.auth_form_pass_field.clone(),
-            username: args.auth_form_username.as_ref().unwrap().clone(),
-            password: args.auth_form_password.as_ref().unwrap().clone(),
-            extra_fields: HashMap::new(),
-            follow_redirects: true,
-        })
-    } else {
-        None
-    };
-
-    // Return auth config if any method was specified
-    if let Some(method) = auth_method {
-        let mut config = AuthConfig::new(method);
-        if let Some(form) = form_auth {
-            config = config.with_form_auth(form);
-        }
-        Ok(Some(config))
-    } else if form_auth.is_some() {
-        Err("Form auth URL specified but no authentication method provided".to_string())
-    } else {
-        Ok(None)
+        _ => Err(format!(
+            "Unknown auth method: '{}'. Supported: basic, bearer, apikey, cookie",
+            method
+        )),
     }
 }
 
@@ -627,10 +645,24 @@ async fn main() {
     config = config.stealth(enable_stealth);
 
     // Apply scope control options
-    if args.strict_domain {
-        config = config.strict_domain(true);
-    } else if args.subs {
-        config = config.allow_subdomains(true);
+    let scope_mode = match parse_scope_mode(&args.scope) {
+        Ok(mode) => mode,
+        Err(e) => {
+            error!("Invalid scope mode: {}", e);
+            process::exit(1);
+        }
+    };
+    
+    match scope_mode {
+        ScopeMode::Strict => {
+            config = config.strict_domain(true);
+        }
+        ScopeMode::SameDomain => {
+            // Default behavior - no additional config needed
+        }
+        ScopeMode::Subdomains => {
+            config = config.allow_subdomains(true);
+        }
     }
 
     // Apply proxy if provided
@@ -655,7 +687,9 @@ async fn main() {
     }
 
     // Apply GraphQL and Source Map settings
-    config = config.graphql_introspect(args.graphql_introspect);
+    // GraphQL introspection is automatically enabled with --all, or can be enabled independently
+    let enable_graphql = args.graphql_introspect || args.all;
+    config = config.graphql_introspect(enable_graphql);
     config = config.parse_source_maps(!args.no_source_maps);
 
     // Create and run crawler (mutable to support browser initialization)
@@ -725,7 +759,7 @@ async fn main() {
     let result = combined_result;
 
     // Apply fuzzing if enabled
-    if args.fuzz || args.fuzz_params || args.fuzz_endpoints {
+    if args.fuzz && args.fuzz_level != "off" {
         // Extract unique URLs from crawled pages
         let mut discovered_urls: Vec<Url> =
             result.pages.iter().map(|page| page.url.clone()).collect();
@@ -738,8 +772,6 @@ async fn main() {
         let fuzzed_urls = apply_fuzzing(
             &discovered_urls,
             args.fuzz,
-            args.fuzz_params,
-            args.fuzz_endpoints,
             &args.fuzz_level,
         );
 
@@ -755,14 +787,30 @@ async fn main() {
     if args.baseline.is_some() || args.compare.is_some() {
         use hazler_core::{DifferConfig, ResponseDiffer};
 
+        // Parse cluster mode
+        let cluster_mode = match parse_cluster_mode(&args.cluster) {
+            Ok(mode) => mode,
+            Err(e) => {
+                error!("Invalid cluster mode: {}", e);
+                process::exit(1);
+            }
+        };
+
+        let (enable_clustering, clustering_algorithm, num_clusters, dbscan_epsilon, dbscan_min_points) = match cluster_mode {
+            ClusterMode::Off => (false, String::from("kmeans"), 5, 0.3, 2),
+            ClusterMode::Auto => (true, String::from("kmeans"), 5, 0.3, 2),  // Auto defaults to kmeans
+            ClusterMode::KMeans(n) => (true, String::from("kmeans"), n, 0.3, 2),
+            ClusterMode::DBSCAN(eps, min_pts) => (true, String::from("dbscan"), 5, eps, min_pts),
+        };
+
         let diff_config = DifferConfig {
             similarity_threshold: args.diff_threshold,
             enable_noise_filtering: true,
-            enable_clustering: args.cluster_responses,
-            clustering_algorithm: args.cluster_algorithm.clone(),
-            num_clusters: args.num_clusters,
-            dbscan_epsilon: 0.3,
-            dbscan_min_points: 2,
+            enable_clustering,
+            clustering_algorithm,
+            num_clusters,
+            dbscan_epsilon,
+            dbscan_min_points,
         };
 
         // Save baseline mode
@@ -856,7 +904,15 @@ async fn main() {
         }
 
         // Clustering mode (if enabled)
-        if args.cluster_responses {
+        let cluster_mode = match parse_cluster_mode(&args.cluster) {
+            Ok(mode) => mode,
+            Err(e) => {
+                error!("Invalid cluster mode: {}", e);
+                process::exit(1);
+            }
+        };
+
+        if !matches!(cluster_mode, ClusterMode::Off) {
             use hazler_core::{DBSCANClusterer, KMeansClusterer, SimHashCalculator};
 
             eprintln!("\n{}", "Response Clustering".bright_cyan().bold());
@@ -869,19 +925,21 @@ async fn main() {
                 .map(|page| (page.url.to_string(), calculator.calculate(&page.body)))
                 .collect();
 
-            let clusters = match args.cluster_algorithm.as_str() {
-                "kmeans" => {
-                    let clusterer = KMeansClusterer::new(args.num_clusters);
+            let clusters = match cluster_mode {
+                ClusterMode::KMeans(n) => {
+                    let clusterer = KMeansClusterer::new(n);
                     clusterer.cluster(&responses)
                 }
-                "dbscan" => {
-                    let clusterer = DBSCANClusterer::new(0.3, 2);
+                ClusterMode::DBSCAN(epsilon, min_pts) => {
+                    let clusterer = DBSCANClusterer::new(epsilon, min_pts);
                     clusterer.cluster(&responses)
                 }
-                _ => {
-                    error!("Invalid clustering algorithm: {}", args.cluster_algorithm);
-                    Vec::new()
+                ClusterMode::Auto => {
+                    // Auto mode: use kmeans with default 5 clusters
+                    let clusterer = KMeansClusterer::new(5);
+                    clusterer.cluster(&responses)
                 }
+                ClusterMode::Off => Vec::new(),  // Should not reach here
             };
 
             for cluster in &clusters {
@@ -901,117 +959,43 @@ async fn main() {
         }
     }
 
-    // Generate HTML report if requested
-    if let Some(html_report_path) = &args.html_report {
-        match generate_html_report(&result, std::path::Path::new(html_report_path)) {
-            Ok(_) => {
-                eprintln!(
-                    "{} HTML report generated: {}",
-                    "✓".green().bold(),
-                    html_report_path.bright_cyan()
-                );
+    // Send to webhook if requested
+    if let Some(webhook_url) = &args.webhook {
+        // Determine webhook type (auto-detect or use explicit type)
+        let webhook_type = if let Some(ref type_str) = args.webhook_type {
+            match parse_webhook_type(type_str) {
+                Ok(wt) => wt,
+                Err(e) => {
+                    error!("Invalid webhook type: {}", e);
+                    process::exit(1);
+                }
             }
-            Err(e) => {
-                error!("Failed to generate HTML report: {}", e);
-            }
-        }
-    }
+        } else {
+            // Auto-detect webhook type from URL
+            detect_webhook_type(webhook_url)
+        };
 
-    // Generate PDF report if requested
-    if let Some(pdf_report_path) = &args.pdf_report {
-        match generate_pdf_report(&result, std::path::Path::new(pdf_report_path)) {
-            Ok(_) => {
-                eprintln!(
-                    "{} PDF report generated: {}",
-                    "✓".green().bold(),
-                    pdf_report_path.bright_cyan()
-                );
+        // Send to appropriate webhook based on type
+        let send_result = match webhook_type {
+            WebhookType::Slack => {
+                webhook::send_to_slack(&result, webhook_url).await
             }
-            Err(e) => {
-                error!("Failed to generate PDF report: {}", e);
+            WebhookType::Discord => {
+                webhook::send_to_discord(&result, webhook_url).await
             }
-        }
-    }
+            WebhookType::Generic => {
+                webhook::send_to_webhook(&result, webhook_url).await
+            }
+        };
 
-    // Export to SQLite if requested
-    if let Some(sqlite_path) = &args.export_sqlite {
-        match export_to_sqlite(&result, std::path::Path::new(sqlite_path)) {
+        match send_result {
             Ok(_) => {
-                eprintln!(
-                    "{} SQLite database exported: {}",
-                    "✓".green().bold(),
-                    sqlite_path.bright_cyan()
-                );
-            }
-            Err(e) => {
-                error!("Failed to export to SQLite: {}", e);
-            }
-        }
-    }
-
-    // Export to OpenAPI if requested
-    if let Some(openapi_path) = &args.export_openapi {
-        let openapi_spec = format_openapi(&result);
-        match fs::write(openapi_path, openapi_spec) {
-            Ok(_) => {
-                eprintln!(
-                    "{} OpenAPI spec exported: {}",
-                    "✓".green().bold(),
-                    openapi_path.bright_cyan()
-                );
-            }
-            Err(e) => {
-                error!("Failed to export OpenAPI spec: {}", e);
-            }
-        }
-    }
-
-    // Export to Postman if requested
-    if let Some(postman_path) = &args.export_postman {
-        let postman_collection = format_postman(&result);
-        match fs::write(postman_path, postman_collection) {
-            Ok(_) => {
-                eprintln!(
-                    "{} Postman collection exported: {}",
-                    "✓".green().bold(),
-                    postman_path.bright_cyan()
-                );
-            }
-            Err(e) => {
-                error!("Failed to export Postman collection: {}", e);
-            }
-        }
-    }
-
-    // Send to Slack webhook if requested
-    if let Some(slack_url) = &args.webhook_slack {
-        match webhook::send_to_slack(&result, slack_url).await {
-            Ok(_) => {
-                eprintln!("{} Results sent to Slack", "✓".green().bold());
-            }
-            Err(e) => {
-                error!("Failed to send to Slack: {}", e);
-            }
-        }
-    }
-
-    // Send to Discord webhook if requested
-    if let Some(discord_url) = &args.webhook_discord {
-        match webhook::send_to_discord(&result, discord_url).await {
-            Ok(_) => {
-                eprintln!("{} Results sent to Discord", "✓".green().bold());
-            }
-            Err(e) => {
-                error!("Failed to send to Discord: {}", e);
-            }
-        }
-    }
-
-    // Send to generic webhook if requested
-    if let Some(webhook_url) = &args.webhook_url {
-        match webhook::send_to_webhook(&result, webhook_url).await {
-            Ok(_) => {
-                eprintln!("{} Results sent to webhook", "✓".green().bold());
+                let type_name = match webhook_type {
+                    WebhookType::Slack => "Slack",
+                    WebhookType::Discord => "Discord",
+                    WebhookType::Generic => "webhook",
+                };
+                eprintln!("{} Results sent to {}", "✓".green().bold(), type_name);
             }
             Err(e) => {
                 error!("Failed to send to webhook: {}", e);
@@ -1020,10 +1004,116 @@ async fn main() {
     }
 
     // Generate report if requested (to stderr, doesn't interfere with output)
-    if args.report {
-        eprintln!("{}", generate_report(&result));
-    } else if args.stats {
-        eprintln!("{}", generate_stats(&result));
+    // Note: Stats are always shown at the end (after results output)
+    // The --export summary:file option writes the full report to a file
+
+    // Handle exports using the new consolidated --export argument
+    if !args.export.is_empty() {
+        match parse_export_specs(&args.export) {
+            Ok(export_specs) => {
+                for spec in export_specs {
+                    match spec.export_type.as_str() {
+                        "summary" => {
+                            // Export summary report to file
+                            let report_content = generate_report(&result);
+                            match fs::write(&spec.file_path, report_content) {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} Summary report exported: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to export summary report: {}", e);
+                                }
+                            }
+                        }
+                        "html" => {
+                            match generate_html_report(&result, std::path::Path::new(&spec.file_path))
+                            {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} HTML report generated: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to generate HTML report: {}", e);
+                                }
+                            }
+                        }
+                        "pdf" => {
+                            match generate_pdf_report(&result, std::path::Path::new(&spec.file_path))
+                            {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} PDF report generated: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to generate PDF report: {}", e);
+                                }
+                            }
+                        }
+                        "sqlite" => {
+                            match export_to_sqlite(&result, std::path::Path::new(&spec.file_path)) {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} SQLite database exported: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to export to SQLite: {}", e);
+                                }
+                            }
+                        }
+                        "openapi" => {
+                            let openapi_spec = format_openapi(&result);
+                            match fs::write(&spec.file_path, openapi_spec) {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} OpenAPI spec exported: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to export OpenAPI spec: {}", e);
+                                }
+                            }
+                        }
+                        "postman" => {
+                            let postman_collection = format_postman(&result);
+                            match fs::write(&spec.file_path, postman_collection) {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} Postman collection exported: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to export Postman collection: {}", e);
+                                }
+                            }
+                        }
+                        _ => {
+                            error!("Unknown export type: {}", spec.export_type);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to parse export specifications: {}", e);
+                process::exit(1);
+            }
+        }
     }
 
     // Create output formatter (exclude_body is true by default, unless --include-body is specified)
@@ -1045,29 +1135,7 @@ async fn main() {
                     println!("{}", line);
                 }
             }
-            Err(e) => {
-                error!("Failed to serialize results: {}", e);
-                process::exit(1);
-            }
-        },
-        "urls" => {
-            println!("{}", formatter.format_urls(&result));
-        }
-        "csv" => {
-            println!("{}", formatter.format_csv(&result));
-        }
-        "tree" => {
-            println!("{}", formatter.format_tree(&result));
-        }
-        "nuclei" => match formatter.format_nuclei(&result) {
-            Ok(lines) => {
-                for line in lines {
-                    println!("{}", line);
-                }
-            }
-            Err(e) => {
-                error!("Failed to serialize Nuclei results: {}", e);
-                process::exit(1);
+            Err(_e) => {
             }
         },
         "ffuf" => match formatter.format_ffuf(&result) {
@@ -1099,9 +1167,8 @@ async fn main() {
         }
     }
 
-    // Print summary to stderr (unless --stats or --report was used)
-    if !args.stats && !args.report {
-        eprintln!("\n{}", "═".repeat(80).bright_blue());
+    // Print summary to stderr (always shown after results output)
+    eprintln!("\n{}", "═".repeat(80).bright_blue());
         eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
         eprintln!("{}", "═".repeat(80).bright_blue());
         eprintln!(
@@ -1155,5 +1222,4 @@ async fn main() {
         }
 
         eprintln!("{}\n", "═".repeat(80).bright_blue());
-    }
 }

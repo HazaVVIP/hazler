@@ -48,26 +48,31 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
 
 #### Rekomendasi Konsolidasi:
 
-- [ ] **Gabungkan Report Generation (4 args → 1 arg)**
+- [x] **Gabungkan Report Generation (4 args → 1 arg)**
   - Dari: `--report`, `--html-report FILE`, `--pdf-report FILE`, `--export-sqlite FILE`
   - Ke: `--export TYPE:FILE` dimana TYPE = {summary, html, pdf, sqlite}
   - Contoh: `--export html:report.html --export pdf:report.pdf --export sqlite:data.db`
   - **Benefit:** Lebih konsisten, dapat multiple exports sekaligus
   - **Impact:** Mengurangi 3 arguments
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
+  - **Note:** Juga mencakup openapi dan postman untuk konsistensi (total: 6 args → 1 arg, pengurangan 5 arguments)
 
-- [ ] **Gabungkan Webhook Options (3 args → 2 args)**
+- [x] **Gabungkan Webhook Options (3 args → 2 args)**
   - Dari: `--webhook-slack URL`, `--webhook-discord URL`, `--webhook-url URL`
   - Ke: `--webhook URL --webhook-type {slack|discord|generic}`
   - Default type: auto-detect dari URL pattern
   - Contoh: `--webhook https://hooks.slack.com/...` (auto-detect slack)
   - **Benefit:** Lebih extensible untuk webhook types baru
-  - **Impact:** Mengurangi 2 arguments, auto-detection menghilangkan kebutuhan --webhook-type di banyak kasus
+  - **Impact:** Mengurangi 1 argument (3 → 2), auto-detection menghilangkan kebutuhan --webhook-type di banyak kasus
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
+  - **Note:** Auto-detection bekerja untuk Slack (hooks.slack.com) dan Discord (discord.com/api/webhooks)
 
-- [ ] **Pertimbangkan gabung --stats dan --report**
+- [x] **Pertimbangkan gabung --stats dan --report**
   - Opsi: `--report` otomatis include stats
-  - Atau: `--report {brief|full}` dimana brief = stats only, full = full report
+  - **Implementasi:** Removed --stats flag, summary always shown at end
   - **Benefit:** Mengurangi kebingungan tentang perbedaan stats vs report
   - **Impact:** Mengurangi 1 argument
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
 
 **Pengurangan Total:** 5-6 arguments → 8-9 arguments
 
@@ -91,6 +96,7 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
   - **Benefit:** Pattern konsisten untuk disabling features
   - **Trade-off:** Sedikit lebih verbose untuk single disable
   - **Alternative:** Tetap terpisah karena ini adalah frequently-used flags
+  - **Rekomendasi:** TIDAK DIIMPLEMENTASIKAN - flags ini frequently-used
   
 - [ ] **Pertimbangkan gabung --aggressive dan --all**
   - Opsi 1: `--mode {default|aggressive|comprehensive}` 
@@ -100,12 +106,14 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
   - Opsi 2: Tetap terpisah karena use case berbeda
   - **Rekomendasi:** TETAP TERPISAH - use case jelas berbeda
   
-- [ ] **--graphql-introspect bisa masuk ke --all atau --aggressive**
+- [x] **--graphql-introspect bisa masuk ke --all atau --aggressive**
   - Jika user pakai `--all`, GraphQL introspect otomatis enabled
   - Tetap bisa di-enable independently dengan `--graphql-introspect`
   - **Benefit:** Mengurangi flag yang perlu diingat untuk comprehensive scan
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
+  - **Note:** GraphQL introspection now auto-enabled with --all flag
 
-**Pengurangan Total:** Minimal (0-1 arguments) - area ini sudah cukup optimal
+**Pengurangan Total:** Minimal (0 arguments) - area ini sudah cukup optimal
 
 ---
 
@@ -117,12 +125,13 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
 
 #### Rekomendasi Konsolidasi:
 
-- [ ] **Gabung ke single scope argument**
+- [x] **Gabung ke single scope argument**
   - Dari: `--strict-domain`, `--subs` (mutually exclusive)
   - Ke: `--scope {strict|same-domain|subdomains}`
   - Default: `same-domain` (current behavior without flags)
   - **Benefit:** Lebih jelas, menghindari mutually exclusive flags
   - **Impact:** Mengurangi 1 argument
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
 
 **Pengurangan Total:** 2 arguments → 1 argument
 
@@ -149,7 +158,7 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
 
 #### Rekomendasi Konsolidasi:
 
-- [ ] **Konsolidasi fuzzing options**
+- [x] **Konsolidasi fuzzing options**
   - **Opsi 1:** Gabung ke `--fuzz MODE` dimana MODE = {off|smart|params|endpoints|full}
     - smart = current --fuzz
     - params = parameter discovery
@@ -166,6 +175,8 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
     
   - **Rekomendasi:** Opsi 2 lebih simple
   - Contoh: `--fuzz --fuzz-level aggressive` vs current `--fuzz --fuzz-params --fuzz-endpoints --fuzz-level aggressive`
+  - **Status:** ✅ SELESAI - Implemented Opsi 2 in v0.2.0
+  - **Note:** Removed --fuzz-params and --fuzz-endpoints, expanded --fuzz-level
 
 **Pengurangan Total:** 4 arguments → 2 arguments
 
@@ -183,7 +194,7 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
 
 #### Rekomendasi Konsolidasi:
 
-- [ ] **Clustering bisa disederhanakan**
+- [x] **Clustering bisa disederhanakan**
   - Dari: `--cluster-responses` + `--cluster-algorithm` + `--num-clusters`
   - Ke: `--cluster {off|auto|kmeans:N|dbscan:epsilon,minpts}`
   - Default: off
@@ -191,10 +202,11 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
   - Contoh: `--cluster kmeans:10` atau `--cluster auto`
   - **Benefit:** Self-documenting, mengurangi arguments
   - **Impact:** 3 arguments → 1 argument
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
 
-- [ ] **Baseline/compare sudah optimal** - tidak perlu perubahan
+- [x] **Baseline/compare sudah optimal** - tidak perlu perubahan
 
-**Pengurangan Total:** 6 arguments → 4 arguments
+**Pengurangan Total:** 3 arguments (clustering: 3 → 1)
 
 ---
 
@@ -242,11 +254,12 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
 
 #### Rekomendasi Konsolidasi:
 
-- [ ] **Prioritaskan --auth-file sebagai primary method**
+- [x] **Prioritaskan --auth-file sebagai primary method**
   - Auth file JSON lebih maintainable untuk complex auth
   - CLI options untuk quick/simple auth only
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
   
-- [ ] **Simplifikasi CLI auth methods**
+- [x] **Simplifikasi CLI auth methods**
   - **Keep minimal CLI options:**
     - `--auth-file FILE` (primary, comprehensive)
     - `--auth METHOD:VALUE` (quick setup)
@@ -258,6 +271,8 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
     - Form auth (complex, butuh multiple fields)
     - API key location/name customization
     - OAuth2 (complex refresh token flow)
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
+  - **Note:** Complex auth scenarios (form auth, OAuth2, custom headers) now require --auth-file
   
 - [ ] **Alternative: Unified --auth dengan method prefix**
   - `--auth basic:username:password`
@@ -266,7 +281,7 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
   - `--auth cookie:session=abc123`
   - `--auth file:auth.json`
   
-**Pengurangan Total:** 14 arguments → 2-3 arguments untuk common cases
+**Pengurangan Total:** 14 arguments → 2 arguments (12 arguments reduced)
 
 **Catatan:** Form auth dan OAuth advanced features masih available via `--auth-file`
 

@@ -57,13 +57,15 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
   - **Status:** ✅ SELESAI - Implemented in v0.2.0
   - **Note:** Juga mencakup openapi dan postman untuk konsistensi (total: 6 args → 1 arg, pengurangan 5 arguments)
 
-- [ ] **Gabungkan Webhook Options (3 args → 2 args)**
+- [x] **Gabungkan Webhook Options (3 args → 2 args)**
   - Dari: `--webhook-slack URL`, `--webhook-discord URL`, `--webhook-url URL`
   - Ke: `--webhook URL --webhook-type {slack|discord|generic}`
   - Default type: auto-detect dari URL pattern
   - Contoh: `--webhook https://hooks.slack.com/...` (auto-detect slack)
   - **Benefit:** Lebih extensible untuk webhook types baru
-  - **Impact:** Mengurangi 2 arguments, auto-detection menghilangkan kebutuhan --webhook-type di banyak kasus
+  - **Impact:** Mengurangi 1 argument (3 → 2), auto-detection menghilangkan kebutuhan --webhook-type di banyak kasus
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
+  - **Note:** Auto-detection bekerja untuk Slack (hooks.slack.com) dan Discord (discord.com/api/webhooks)
 
 - [ ] **Pertimbangkan gabung --stats dan --report**
   - Opsi: `--report` otomatis include stats

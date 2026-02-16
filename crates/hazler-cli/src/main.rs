@@ -84,20 +84,23 @@ struct Args {
     #[arg(long, value_name = "TYPE:FILE")]
     export: Vec<String>,
 
-    /// Send results to Slack webhook
-    /// Example: --webhook-slack https://hooks.slack.com/services/...
+    /// Send results to webhook
+    /// Webhook type is auto-detected from URL pattern:
+    /// - Slack: hooks.slack.com
+    /// - Discord: discord.com/api/webhooks
+    /// - Generic: all other URLs
+    /// Examples:
+    ///   --webhook https://hooks.slack.com/services/...
+    ///   --webhook https://discord.com/api/webhooks/...
+    ///   --webhook https://example.com/webhook --webhook-type generic
     #[arg(long, value_name = "URL")]
-    webhook_slack: Option<String>,
+    webhook: Option<String>,
 
-    /// Send results to Discord webhook
-    /// Example: --webhook-discord https://discord.com/api/webhooks/...
-    #[arg(long, value_name = "URL")]
-    webhook_discord: Option<String>,
-
-    /// Send results to generic webhook (JSON payload)
-    /// Example: --webhook-url https://example.com/webhook
-    #[arg(long, value_name = "URL")]
-    webhook_url: Option<String>,
+    /// Webhook type (optional, auto-detected by default)
+    /// Options: slack, discord, generic
+    /// Only needed if auto-detection fails or you want to override
+    #[arg(long, value_name = "TYPE")]
+    webhook_type: Option<String>,
 
     /// Verbose output
     #[arg(short = 'v', long)]
@@ -383,6 +386,38 @@ fn parse_export_specs(export_args: &[String]) -> Result<Vec<ExportSpec>, String>
     }
     
     Ok(specs)
+}
+
+/// Webhook type for different webhook integrations
+#[derive(Debug, Clone, PartialEq)]
+enum WebhookType {
+    Slack,
+    Discord,
+    Generic,
+}
+
+/// Detect webhook type from URL pattern
+fn detect_webhook_type(url: &str) -> WebhookType {
+    if url.contains("hooks.slack.com") {
+        WebhookType::Slack
+    } else if url.contains("discord.com/api/webhooks") {
+        WebhookType::Discord
+    } else {
+        WebhookType::Generic
+    }
+}
+
+/// Parse webhook type from string
+fn parse_webhook_type(type_str: &str) -> Result<WebhookType, String> {
+    match type_str.to_lowercase().as_str() {
+        "slack" => Ok(WebhookType::Slack),
+        "discord" => Ok(WebhookType::Discord),
+        "generic" => Ok(WebhookType::Generic),
+        _ => Err(format!(
+            "Unknown webhook type: '{}'. Supported types: slack, discord, generic",
+            type_str
+        )),
+    }
 }
 
 /// Build authentication configuration from CLI arguments
@@ -923,35 +958,43 @@ async fn main() {
         }
     }
 
-    // Send to Slack webhook if requested
-    if let Some(slack_url) = &args.webhook_slack {
-        match webhook::send_to_slack(&result, slack_url).await {
-            Ok(_) => {
-                eprintln!("{} Results sent to Slack", "✓".green().bold());
+    // Send to webhook if requested
+    if let Some(webhook_url) = &args.webhook {
+        // Determine webhook type (auto-detect or use explicit type)
+        let webhook_type = if let Some(ref type_str) = args.webhook_type {
+            match parse_webhook_type(type_str) {
+                Ok(wt) => wt,
+                Err(e) => {
+                    error!("Invalid webhook type: {}", e);
+                    process::exit(1);
+                }
             }
-            Err(e) => {
-                error!("Failed to send to Slack: {}", e);
-            }
-        }
-    }
+        } else {
+            // Auto-detect webhook type from URL
+            detect_webhook_type(webhook_url)
+        };
 
-    // Send to Discord webhook if requested
-    if let Some(discord_url) = &args.webhook_discord {
-        match webhook::send_to_discord(&result, discord_url).await {
-            Ok(_) => {
-                eprintln!("{} Results sent to Discord", "✓".green().bold());
+        // Send to appropriate webhook based on type
+        let send_result = match webhook_type {
+            WebhookType::Slack => {
+                webhook::send_to_slack(&result, webhook_url).await
             }
-            Err(e) => {
-                error!("Failed to send to Discord: {}", e);
+            WebhookType::Discord => {
+                webhook::send_to_discord(&result, webhook_url).await
             }
-        }
-    }
+            WebhookType::Generic => {
+                webhook::send_to_webhook(&result, webhook_url).await
+            }
+        };
 
-    // Send to generic webhook if requested
-    if let Some(webhook_url) = &args.webhook_url {
-        match webhook::send_to_webhook(&result, webhook_url).await {
+        match send_result {
             Ok(_) => {
-                eprintln!("{} Results sent to webhook", "✓".green().bold());
+                let type_name = match webhook_type {
+                    WebhookType::Slack => "Slack",
+                    WebhookType::Discord => "Discord",
+                    WebhookType::Generic => "webhook",
+                };
+                eprintln!("{} Results sent to {}", "✓".green().bold(), type_name);
             }
             Err(e) => {
                 error!("Failed to send to webhook: {}", e);

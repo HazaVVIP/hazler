@@ -74,36 +74,15 @@ struct Args {
     #[arg(long)]
     stats: bool,
 
-    /// Generate summary report
-    #[arg(long)]
-    report: bool,
-
-    /// Generate HTML report and save to file
-    /// Creates a comprehensive HTML report with visualizations
-    /// Example: --html-report report.html
-    #[arg(long, value_name = "FILE")]
-    html_report: Option<String>,
-
-    /// Generate PDF report and save to file
-    /// Creates a PDF report with summary statistics
-    /// Example: --pdf-report report.pdf
-    #[arg(long, value_name = "FILE")]
-    pdf_report: Option<String>,
-
-    /// Export results to SQLite database
-    /// Example: --export-sqlite crawl.db
-    #[arg(long, value_name = "FILE")]
-    export_sqlite: Option<String>,
-
-    /// Export as OpenAPI/Swagger specification
-    /// Example: --export-openapi swagger.json
-    #[arg(long, value_name = "FILE")]
-    export_openapi: Option<String>,
-
-    /// Export as Postman collection
-    /// Example: --export-postman collection.json
-    #[arg(long, value_name = "FILE")]
-    export_postman: Option<String>,
+    /// Export results in various formats
+    /// Format: TYPE:FILE where TYPE can be summary, html, pdf, sqlite, openapi, or postman
+    /// Can be specified multiple times for multiple exports
+    /// Examples:
+    ///   --export html:report.html
+    ///   --export pdf:report.pdf --export sqlite:data.db
+    ///   --export summary:summary.txt
+    #[arg(long, value_name = "TYPE:FILE")]
+    export: Vec<String>,
 
     /// Send results to Slack webhook
     /// Example: --webhook-slack https://hooks.slack.com/services/...
@@ -361,6 +340,49 @@ struct Args {
     /// Form password value
     #[arg(long, value_name = "PASSWORD")]
     auth_form_password: Option<String>,
+}
+
+/// Export specification parsed from TYPE:FILE format
+#[derive(Debug, Clone)]
+struct ExportSpec {
+    export_type: String,
+    file_path: String,
+}
+
+/// Parse export specifications from command line arguments
+fn parse_export_specs(export_args: &[String]) -> Result<Vec<ExportSpec>, String> {
+    let mut specs = Vec::new();
+    
+    for arg in export_args {
+        let parts: Vec<&str> = arg.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            return Err(format!(
+                "Invalid export format: '{}'. Expected format: TYPE:FILE",
+                arg
+            ));
+        }
+        
+        let export_type = parts[0].trim().to_lowercase();
+        let file_path = parts[1].trim().to_string();
+        
+        // Validate export type
+        match export_type.as_str() {
+            "summary" | "html" | "pdf" | "sqlite" | "openapi" | "postman" => {
+                specs.push(ExportSpec {
+                    export_type,
+                    file_path,
+                });
+            }
+            _ => {
+                return Err(format!(
+                    "Unknown export type: '{}'. Supported types: summary, html, pdf, sqlite, openapi, postman",
+                    export_type
+                ));
+            }
+        }
+    }
+    
+    Ok(specs)
 }
 
 /// Build authentication configuration from CLI arguments
@@ -901,88 +923,6 @@ async fn main() {
         }
     }
 
-    // Generate HTML report if requested
-    if let Some(html_report_path) = &args.html_report {
-        match generate_html_report(&result, std::path::Path::new(html_report_path)) {
-            Ok(_) => {
-                eprintln!(
-                    "{} HTML report generated: {}",
-                    "✓".green().bold(),
-                    html_report_path.bright_cyan()
-                );
-            }
-            Err(e) => {
-                error!("Failed to generate HTML report: {}", e);
-            }
-        }
-    }
-
-    // Generate PDF report if requested
-    if let Some(pdf_report_path) = &args.pdf_report {
-        match generate_pdf_report(&result, std::path::Path::new(pdf_report_path)) {
-            Ok(_) => {
-                eprintln!(
-                    "{} PDF report generated: {}",
-                    "✓".green().bold(),
-                    pdf_report_path.bright_cyan()
-                );
-            }
-            Err(e) => {
-                error!("Failed to generate PDF report: {}", e);
-            }
-        }
-    }
-
-    // Export to SQLite if requested
-    if let Some(sqlite_path) = &args.export_sqlite {
-        match export_to_sqlite(&result, std::path::Path::new(sqlite_path)) {
-            Ok(_) => {
-                eprintln!(
-                    "{} SQLite database exported: {}",
-                    "✓".green().bold(),
-                    sqlite_path.bright_cyan()
-                );
-            }
-            Err(e) => {
-                error!("Failed to export to SQLite: {}", e);
-            }
-        }
-    }
-
-    // Export to OpenAPI if requested
-    if let Some(openapi_path) = &args.export_openapi {
-        let openapi_spec = format_openapi(&result);
-        match fs::write(openapi_path, openapi_spec) {
-            Ok(_) => {
-                eprintln!(
-                    "{} OpenAPI spec exported: {}",
-                    "✓".green().bold(),
-                    openapi_path.bright_cyan()
-                );
-            }
-            Err(e) => {
-                error!("Failed to export OpenAPI spec: {}", e);
-            }
-        }
-    }
-
-    // Export to Postman if requested
-    if let Some(postman_path) = &args.export_postman {
-        let postman_collection = format_postman(&result);
-        match fs::write(postman_path, postman_collection) {
-            Ok(_) => {
-                eprintln!(
-                    "{} Postman collection exported: {}",
-                    "✓".green().bold(),
-                    postman_path.bright_cyan()
-                );
-            }
-            Err(e) => {
-                error!("Failed to export Postman collection: {}", e);
-            }
-        }
-    }
-
     // Send to Slack webhook if requested
     if let Some(slack_url) = &args.webhook_slack {
         match webhook::send_to_slack(&result, slack_url).await {
@@ -1020,10 +960,119 @@ async fn main() {
     }
 
     // Generate report if requested (to stderr, doesn't interfere with output)
-    if args.report {
-        eprintln!("{}", generate_report(&result));
-    } else if args.stats {
+    // Note: This is kept separate for backward compatibility and console output
+    // The --export summary:file option writes the same report to a file
+    if args.stats {
         eprintln!("{}", generate_stats(&result));
+    }
+
+    // Handle exports using the new consolidated --export argument
+    if !args.export.is_empty() {
+        match parse_export_specs(&args.export) {
+            Ok(export_specs) => {
+                for spec in export_specs {
+                    match spec.export_type.as_str() {
+                        "summary" => {
+                            // Export summary report to file
+                            let report_content = generate_report(&result);
+                            match fs::write(&spec.file_path, report_content) {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} Summary report exported: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to export summary report: {}", e);
+                                }
+                            }
+                        }
+                        "html" => {
+                            match generate_html_report(&result, std::path::Path::new(&spec.file_path))
+                            {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} HTML report generated: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to generate HTML report: {}", e);
+                                }
+                            }
+                        }
+                        "pdf" => {
+                            match generate_pdf_report(&result, std::path::Path::new(&spec.file_path))
+                            {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} PDF report generated: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to generate PDF report: {}", e);
+                                }
+                            }
+                        }
+                        "sqlite" => {
+                            match export_to_sqlite(&result, std::path::Path::new(&spec.file_path)) {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} SQLite database exported: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to export to SQLite: {}", e);
+                                }
+                            }
+                        }
+                        "openapi" => {
+                            let openapi_spec = format_openapi(&result);
+                            match fs::write(&spec.file_path, openapi_spec) {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} OpenAPI spec exported: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to export OpenAPI spec: {}", e);
+                                }
+                            }
+                        }
+                        "postman" => {
+                            let postman_collection = format_postman(&result);
+                            match fs::write(&spec.file_path, postman_collection) {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "{} Postman collection exported: {}",
+                                        "✓".green().bold(),
+                                        spec.file_path.bright_cyan()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!("Failed to export Postman collection: {}", e);
+                                }
+                            }
+                        }
+                        _ => {
+                            error!("Unknown export type: {}", spec.export_type);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to parse export specifications: {}", e);
+                process::exit(1);
+            }
+        }
     }
 
     // Create output formatter (exclude_body is true by default, unless --include-body is specified)
@@ -1045,29 +1094,7 @@ async fn main() {
                     println!("{}", line);
                 }
             }
-            Err(e) => {
-                error!("Failed to serialize results: {}", e);
-                process::exit(1);
-            }
-        },
-        "urls" => {
-            println!("{}", formatter.format_urls(&result));
-        }
-        "csv" => {
-            println!("{}", formatter.format_csv(&result));
-        }
-        "tree" => {
-            println!("{}", formatter.format_tree(&result));
-        }
-        "nuclei" => match formatter.format_nuclei(&result) {
-            Ok(lines) => {
-                for line in lines {
-                    println!("{}", line);
-                }
-            }
-            Err(e) => {
-                error!("Failed to serialize Nuclei results: {}", e);
-                process::exit(1);
+            Err(_e) => {
             }
         },
         "ffuf" => match formatter.format_ffuf(&result) {
@@ -1099,8 +1126,8 @@ async fn main() {
         }
     }
 
-    // Print summary to stderr (unless --stats or --report was used)
-    if !args.stats && !args.report {
+    // Print summary to stderr (unless --stats was used)
+    if !args.stats {
         eprintln!("\n{}", "═".repeat(80).bright_blue());
         eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
         eprintln!("{}", "═".repeat(80).bright_blue());

@@ -48,12 +48,14 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
 
 #### Rekomendasi Konsolidasi:
 
-- [ ] **Gabungkan Report Generation (4 args → 1 arg)**
+- [x] **Gabungkan Report Generation (4 args → 1 arg)**
   - Dari: `--report`, `--html-report FILE`, `--pdf-report FILE`, `--export-sqlite FILE`
   - Ke: `--export TYPE:FILE` dimana TYPE = {summary, html, pdf, sqlite}
   - Contoh: `--export html:report.html --export pdf:report.pdf --export sqlite:data.db`
   - **Benefit:** Lebih konsisten, dapat multiple exports sekaligus
   - **Impact:** Mengurangi 3 arguments
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
+  - **Note:** Juga mencakup openapi dan postman untuk konsistensi (total: 6 args → 1 arg, pengurangan 5 arguments)
 
 - [ ] **Gabungkan Webhook Options (3 args → 2 args)**
   - Dari: `--webhook-slack URL`, `--webhook-discord URL`, `--webhook-url URL`

@@ -158,7 +158,7 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
 
 #### Rekomendasi Konsolidasi:
 
-- [ ] **Konsolidasi fuzzing options**
+- [x] **Konsolidasi fuzzing options**
   - **Opsi 1:** Gabung ke `--fuzz MODE` dimana MODE = {off|smart|params|endpoints|full}
     - smart = current --fuzz
     - params = parameter discovery
@@ -175,6 +175,8 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
     
   - **Rekomendasi:** Opsi 2 lebih simple
   - Contoh: `--fuzz --fuzz-level aggressive` vs current `--fuzz --fuzz-params --fuzz-endpoints --fuzz-level aggressive`
+  - **Status:** ✅ SELESAI - Implemented Opsi 2 in v0.2.0
+  - **Note:** Removed --fuzz-params and --fuzz-endpoints, expanded --fuzz-level
 
 **Pengurangan Total:** 4 arguments → 2 arguments
 
@@ -192,7 +194,7 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
 
 #### Rekomendasi Konsolidasi:
 
-- [ ] **Clustering bisa disederhanakan**
+- [x] **Clustering bisa disederhanakan**
   - Dari: `--cluster-responses` + `--cluster-algorithm` + `--num-clusters`
   - Ke: `--cluster {off|auto|kmeans:N|dbscan:epsilon,minpts}`
   - Default: off
@@ -200,10 +202,11 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
   - Contoh: `--cluster kmeans:10` atau `--cluster auto`
   - **Benefit:** Self-documenting, mengurangi arguments
   - **Impact:** 3 arguments → 1 argument
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
 
-- [ ] **Baseline/compare sudah optimal** - tidak perlu perubahan
+- [x] **Baseline/compare sudah optimal** - tidak perlu perubahan
 
-**Pengurangan Total:** 6 arguments → 4 arguments
+**Pengurangan Total:** 3 arguments (clustering: 3 → 1)
 
 ---
 
@@ -251,11 +254,12 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
 
 #### Rekomendasi Konsolidasi:
 
-- [ ] **Prioritaskan --auth-file sebagai primary method**
+- [x] **Prioritaskan --auth-file sebagai primary method**
   - Auth file JSON lebih maintainable untuk complex auth
   - CLI options untuk quick/simple auth only
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
   
-- [ ] **Simplifikasi CLI auth methods**
+- [x] **Simplifikasi CLI auth methods**
   - **Keep minimal CLI options:**
     - `--auth-file FILE` (primary, comprehensive)
     - `--auth METHOD:VALUE` (quick setup)
@@ -267,6 +271,8 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
     - Form auth (complex, butuh multiple fields)
     - API key location/name customization
     - OAuth2 (complex refresh token flow)
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
+  - **Note:** Complex auth scenarios (form auth, OAuth2, custom headers) now require --auth-file
   
 - [ ] **Alternative: Unified --auth dengan method prefix**
   - `--auth basic:username:password`
@@ -275,7 +281,7 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
   - `--auth cookie:session=abc123`
   - `--auth file:auth.json`
   
-**Pengurangan Total:** 14 arguments → 2-3 arguments untuk common cases
+**Pengurangan Total:** 14 arguments → 2 arguments (12 arguments reduced)
 
 **Catatan:** Form auth dan OAuth advanced features masih available via `--auth-file`
 

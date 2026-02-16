@@ -3,31 +3,39 @@ use hazler_fuzzer::{FuzzStrategy, FuzzerConfig, ParamDiscovery, UrlMutator};
 use tracing::info;
 use url::Url;
 
-/// Apply fuzzing to discovered URLs
+/// Apply fuzzing to discovered URLs based on fuzz flag and level
 pub fn apply_fuzzing(
     urls: &[Url],
     fuzz: bool,
-    fuzz_params: bool,
-    fuzz_endpoints: bool,
     fuzz_level: &str,
 ) -> Vec<Url> {
-    if !fuzz && !fuzz_params && !fuzz_endpoints {
+    // Check if fuzzing is disabled
+    if !fuzz || fuzz_level == "off" {
         return Vec::new();
     }
 
-    info!("Starting smart fuzzing...");
+    info!("Starting fuzzing with level: {}", fuzz_level);
 
     let mut fuzzed_urls = Vec::new();
+
+    // Determine what to enable based on level
+    let (enable_mutations, enable_params, enable_endpoints) = match fuzz_level {
+        "minimal" => (true, false, false),      // Basic mutations only
+        "default" => (true, false, false),      // Smart fuzzing (mutations)
+        "aggressive" => (true, true, false),    // Smart + params
+        "full" => (true, true, true),           // All modes
+        _ => (true, false, false),              // Default fallback
+    };
 
     // Configure fuzzer based on level
     let config = match fuzz_level {
         "minimal" => FuzzerConfig::minimal(),
-        "aggressive" => FuzzerConfig::aggressive(),
+        "aggressive" | "full" => FuzzerConfig::aggressive(),
         _ => FuzzerConfig::default(),
     };
 
     // Apply URL mutations
-    if fuzz || fuzz_endpoints {
+    if enable_mutations || enable_endpoints {
         let mutator = UrlMutator::new(config.clone());
 
         for url in urls {
@@ -47,7 +55,7 @@ pub fn apply_fuzzing(
     }
 
     // Apply parameter discovery
-    if fuzz || fuzz_params {
+    if enable_params {
         let param_discovery = ParamDiscovery::new(FuzzStrategy::Individual);
 
         for url in urls {

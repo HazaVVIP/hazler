@@ -1,7 +1,7 @@
 use clap::Parser;
 use colored::Colorize;
 use hazler_core::{Config, Crawler};
-use hazler_http::{ApiKeyLocation, AuthConfig, AuthMethod, FormAuth};
+use hazler_http::{ApiKeyLocation, AuthConfig, AuthMethod};
 use std::collections::HashMap;
 use std::fs;
 use std::process;
@@ -185,24 +185,19 @@ struct Args {
     no_source_maps: bool,
 
     /// Enable smart fuzzing mode
-    /// Automatically generates URL variations to discover hidden endpoints:
-    /// - Pluralization (user -> users)
-    /// - File extensions (.json, .xml, .php)
-    /// - API versioning (v1, v2, v3)
+    /// Automatically generates URL variations to discover hidden endpoints
+    /// Use with --fuzz-level to control fuzzing behavior
     #[arg(long)]
     fuzz: bool,
 
-    /// Enable parameter discovery fuzzing
-    /// Tests common parameter names on discovered endpoints
-    #[arg(long)]
-    fuzz_params: bool,
-
-    /// Enable endpoint fuzzing with wordlists
-    /// Tests common endpoint paths and variations
-    #[arg(long)]
-    fuzz_endpoints: bool,
-
-    /// Fuzzing aggressiveness level (minimal, default, aggressive)
+    /// Fuzzing level and mode
+    /// Levels:
+    ///   - off: No fuzzing
+    ///   - minimal: Basic variations only
+    ///   - default: Smart fuzzing (URL mutations)
+    ///   - aggressive: Smart + parameter discovery
+    ///   - full: All fuzzing modes (mutations + parameters + endpoints)
+    /// Example: --fuzz --fuzz-level aggressive
     #[arg(long, default_value = "default")]
     fuzz_level: String,
 
@@ -223,18 +218,15 @@ struct Args {
     #[arg(long, default_value = "0.85")]
     diff_threshold: f64,
 
-    /// Enable response clustering
-    /// Groups similar responses together using K-means or DBSCAN
-    #[arg(long)]
-    cluster_responses: bool,
-
-    /// Clustering algorithm (kmeans or dbscan)
-    #[arg(long, default_value = "kmeans")]
-    cluster_algorithm: String,
-
-    /// Number of clusters for K-means
-    #[arg(long, default_value = "5")]
-    num_clusters: usize,
+    /// Response clustering configuration
+    /// Format: off|auto|kmeans:N|dbscan:epsilon,minpts
+    /// Examples:
+    ///   --cluster off (disable clustering)
+    ///   --cluster auto (automatic algorithm selection)
+    ///   --cluster kmeans:10 (K-means with 10 clusters)
+    ///   --cluster dbscan:0.3,2 (DBSCAN with epsilon=0.3, min_points=2)
+    #[arg(long, default_value = "off", value_name = "MODE")]
+    cluster: String,
 
     /// Resume from saved state file
     /// Continues crawling from where it was left off
@@ -272,73 +264,27 @@ struct Args {
     progress: u64,
 
     // ===== Authentication Options =====
-    /// Basic Auth credentials (username:password)
-    /// Example: --auth-basic "user:pass"
-    #[arg(long, value_name = "CREDENTIALS")]
-    auth_basic: Option<String>,
-
-    /// Bearer token for authentication
-    /// Example: --auth-bearer "eyJhbGc..."
-    #[arg(long, value_name = "TOKEN")]
-    auth_bearer: Option<String>,
-
-    /// Cookie for authentication (name=value format, can be repeated)
-    /// Example: --auth-cookie "session=abc123"
-    #[arg(long, value_name = "COOKIE")]
-    auth_cookie: Vec<String>,
-
-    /// Custom header for authentication (Name:Value format)
-    /// Example: --auth-header "X-API-Key:secret"
-    #[arg(long, value_name = "HEADER")]
-    auth_header: Option<String>,
-
-    /// API key for authentication
-    /// Example: --auth-apikey "your-api-key"
-    #[arg(long, value_name = "KEY")]
-    auth_apikey: Option<String>,
-
-    /// API key location (header, query, or cookie)
-    /// Default: header
-    #[arg(long, default_value = "header")]
-    auth_apikey_location: String,
-
-    /// API key name (header/param/cookie name)
-    /// Default: X-API-Key
-    #[arg(long, default_value = "X-API-Key")]
-    auth_apikey_name: String,
-
-    /// OAuth2 access token
-    /// Example: --auth-oauth "access-token"
-    #[arg(long, value_name = "TOKEN")]
-    auth_oauth: Option<String>,
+    /// Authentication configuration
+    /// Format: METHOD:VALUE
+    /// Supported methods:
+    ///   - basic:username:password
+    ///   - bearer:token
+    ///   - apikey:key
+    ///   - cookie:name=value
+    /// Examples:
+    ///   --auth basic:admin:secretpass
+    ///   --auth bearer:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    ///   --auth apikey:your-api-key-here
+    ///   --auth cookie:session=abc123
+    /// Can be repeated for multiple auth mechanisms
+    #[arg(long, value_name = "METHOD:VALUE")]
+    auth: Vec<String>,
 
     /// Load authentication configuration from JSON file
+    /// For complex authentication (form auth, OAuth2, custom headers)
     /// Example: --auth-file credentials.json
     #[arg(long, value_name = "FILE")]
     auth_file: Option<String>,
-
-    /// Form-based login URL
-    /// Example: --auth-form-url "https://example.com/login"
-    #[arg(long, value_name = "URL")]
-    auth_form_url: Option<String>,
-
-    /// Form username field name
-    /// Default: username
-    #[arg(long, default_value = "username")]
-    auth_form_user_field: String,
-
-    /// Form password field name
-    /// Default: password
-    #[arg(long, default_value = "password")]
-    auth_form_pass_field: String,
-
-    /// Form username value
-    #[arg(long, value_name = "USERNAME")]
-    auth_form_username: Option<String>,
-
-    /// Form password value
-    #[arg(long, value_name = "PASSWORD")]
-    auth_form_password: Option<String>,
 }
 
 /// Export specification parsed from TYPE:FILE format
@@ -400,6 +346,15 @@ enum ScopeMode {
     Subdomains,    // Include all subdomains
 }
 
+/// Clustering configuration mode
+#[derive(Debug, Clone, PartialEq)]
+enum ClusterMode {
+    Off,
+    Auto,
+    KMeans(usize),           // K-means with N clusters
+    DBSCAN(f64, usize),      // DBSCAN with epsilon and min_points
+}
+
 /// Detect webhook type from URL pattern
 fn detect_webhook_type(url: &str) -> WebhookType {
     if url.contains("hooks.slack.com") {
@@ -437,9 +392,55 @@ fn parse_scope_mode(scope_str: &str) -> Result<ScopeMode, String> {
     }
 }
 
+/// Parse cluster mode from string
+fn parse_cluster_mode(cluster_str: &str) -> Result<ClusterMode, String> {
+    let lower = cluster_str.to_lowercase();
+    
+    if lower == "off" {
+        return Ok(ClusterMode::Off);
+    }
+    
+    if lower == "auto" {
+        return Ok(ClusterMode::Auto);
+    }
+    
+    // Parse kmeans:N format
+    if lower.starts_with("kmeans:") {
+        let parts: Vec<&str> = lower.split(':').collect();
+        if parts.len() == 2 {
+            match parts[1].parse::<usize>() {
+                Ok(n) if n > 0 => return Ok(ClusterMode::KMeans(n)),
+                Ok(_) => return Err("Number of clusters must be > 0".to_string()),
+                Err(_) => return Err(format!("Invalid number of clusters: '{}'", parts[1])),
+            }
+        }
+    }
+    
+    // Parse dbscan:epsilon,minpts format
+    if lower.starts_with("dbscan:") {
+        let parts: Vec<&str> = lower.split(':').collect();
+        if parts.len() == 2 {
+            let params: Vec<&str> = parts[1].split(',').collect();
+            if params.len() == 2 {
+                match (params[0].parse::<f64>(), params[1].parse::<usize>()) {
+                    (Ok(epsilon), Ok(min_pts)) if epsilon > 0.0 && min_pts > 0 => {
+                        return Ok(ClusterMode::DBSCAN(epsilon, min_pts));
+                    }
+                    _ => return Err(format!("Invalid DBSCAN parameters: '{}'", parts[1])),
+                }
+            }
+        }
+    }
+    
+    Err(format!(
+        "Invalid cluster mode: '{}'. Supported: off, auto, kmeans:N, dbscan:epsilon,minpts",
+        cluster_str
+    ))
+}
+
 /// Build authentication configuration from CLI arguments
 fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
-    // Load from file if provided
+    // Load from file if provided (takes priority)
     if let Some(ref auth_file) = args.auth_file {
         let content = fs::read_to_string(auth_file)
             .map_err(|e| format!("Failed to read auth file: {}", e))?;
@@ -448,134 +449,77 @@ fn build_auth_config(args: &Args) -> Result<Option<AuthConfig>, String> {
         return Ok(Some(config));
     }
 
-    // Build from CLI arguments
-    let mut auth_method = None;
-
-    // Check for Basic Auth
-    if let Some(ref creds) = args.auth_basic {
-        let parts: Vec<&str> = creds.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err("Basic auth must be in format username:password".to_string());
-        }
-        auth_method = Some(AuthMethod::Basic {
-            username: parts[0].to_string(),
-            password: parts[1].to_string(),
-        });
+    // Parse auth specifications from CLI
+    if args.auth.is_empty() {
+        return Ok(None);
     }
 
-    // Check for Bearer Token
-    if let Some(ref token) = args.auth_bearer {
-        if auth_method.is_some() {
-            return Err(
-                "Multiple authentication methods specified. Please use only one.".to_string(),
-            );
-        }
-        auth_method = Some(AuthMethod::Bearer {
-            token: token.clone(),
-        });
+    // For simplicity, we only support one auth method at a time from CLI
+    // Complex scenarios should use --auth-file
+    if args.auth.len() > 1 {
+        return Err("Multiple --auth specifications not supported. For complex auth, use --auth-file".to_string());
     }
 
-    // Check for Cookie Auth
-    if !args.auth_cookie.is_empty() {
-        if auth_method.is_some() {
-            return Err(
-                "Multiple authentication methods specified. Please use only one.".to_string(),
-            );
-        }
-        let mut cookies = HashMap::new();
-        for cookie in &args.auth_cookie {
-            let parts: Vec<&str> = cookie.splitn(2, '=').collect();
-            if parts.len() != 2 {
-                return Err(format!("Invalid cookie format: {}. Use name=value", cookie));
+    let auth_spec = &args.auth[0];
+    let auth_method = parse_auth_spec(auth_spec)?;
+
+    Ok(Some(AuthConfig::new(auth_method)))
+}
+
+/// Parse authentication specification from METHOD:VALUE format
+fn parse_auth_spec(spec: &str) -> Result<AuthMethod, String> {
+    let parts: Vec<&str> = spec.splitn(2, ':').collect();
+    if parts.len() < 2 {
+        return Err(format!(
+            "Invalid auth format: '{}'. Expected METHOD:VALUE",
+            spec
+        ));
+    }
+
+    let method = parts[0].to_lowercase();
+    let value = parts[1];
+
+    match method.as_str() {
+        "basic" => {
+            // Format: basic:username:password
+            let cred_parts: Vec<&str> = value.splitn(2, ':').collect();
+            if cred_parts.len() != 2 {
+                return Err("Basic auth must be in format basic:username:password".to_string());
             }
-            cookies.insert(parts[0].to_string(), parts[1].to_string());
+            Ok(AuthMethod::Basic {
+                username: cred_parts[0].to_string(),
+                password: cred_parts[1].to_string(),
+            })
         }
-        auth_method = Some(AuthMethod::Cookie { cookies });
-    }
-
-    // Check for Custom Header
-    if let Some(ref header) = args.auth_header {
-        if auth_method.is_some() {
-            return Err(
-                "Multiple authentication methods specified. Please use only one.".to_string(),
-            );
+        "bearer" => {
+            // Format: bearer:token
+            Ok(AuthMethod::Bearer {
+                token: value.to_string(),
+            })
         }
-        let parts: Vec<&str> = header.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err("Custom header must be in format Name:Value".to_string());
+        "apikey" => {
+            // Format: apikey:key
+            // Uses default location (header) and name (X-API-Key)
+            Ok(AuthMethod::ApiKey {
+                key: value.to_string(),
+                location: ApiKeyLocation::Header,
+                name: "X-API-Key".to_string(),
+            })
         }
-        auth_method = Some(AuthMethod::Header {
-            name: parts[0].to_string(),
-            value: parts[1].to_string(),
-        });
-    }
-
-    // Check for API Key
-    if let Some(ref key) = args.auth_apikey {
-        if auth_method.is_some() {
-            return Err(
-                "Multiple authentication methods specified. Please use only one.".to_string(),
-            );
+        "cookie" => {
+            // Format: cookie:name=value
+            let cookie_parts: Vec<&str> = value.splitn(2, '=').collect();
+            if cookie_parts.len() != 2 {
+                return Err("Cookie must be in format cookie:name=value".to_string());
+            }
+            let mut cookies = HashMap::new();
+            cookies.insert(cookie_parts[0].to_string(), cookie_parts[1].to_string());
+            Ok(AuthMethod::Cookie { cookies })
         }
-        let location = match args.auth_apikey_location.to_lowercase().as_str() {
-            "header" => ApiKeyLocation::Header,
-            "query" => ApiKeyLocation::Query,
-            "cookie" => ApiKeyLocation::Cookie,
-            _ => return Err("API key location must be: header, query, or cookie".to_string()),
-        };
-        auth_method = Some(AuthMethod::ApiKey {
-            key: key.clone(),
-            location,
-            name: args.auth_apikey_name.clone(),
-        });
-    }
-
-    // Check for OAuth2
-    if let Some(ref token) = args.auth_oauth {
-        if auth_method.is_some() {
-            return Err(
-                "Multiple authentication methods specified. Please use only one.".to_string(),
-            );
-        }
-        auth_method = Some(AuthMethod::OAuth2 {
-            access_token: token.clone(),
-            token_type: Some("Bearer".to_string()),
-            refresh_token: None,
-            expires_in: None,
-        });
-    }
-
-    // Build form auth if provided
-    let form_auth = if let Some(ref url) = args.auth_form_url {
-        if args.auth_form_username.is_none() || args.auth_form_password.is_none() {
-            return Err(
-                "Form auth requires --auth-form-username and --auth-form-password".to_string(),
-            );
-        }
-        Some(FormAuth {
-            login_url: url.clone(),
-            username_field: args.auth_form_user_field.clone(),
-            password_field: args.auth_form_pass_field.clone(),
-            username: args.auth_form_username.as_ref().unwrap().clone(),
-            password: args.auth_form_password.as_ref().unwrap().clone(),
-            extra_fields: HashMap::new(),
-            follow_redirects: true,
-        })
-    } else {
-        None
-    };
-
-    // Return auth config if any method was specified
-    if let Some(method) = auth_method {
-        let mut config = AuthConfig::new(method);
-        if let Some(form) = form_auth {
-            config = config.with_form_auth(form);
-        }
-        Ok(Some(config))
-    } else if form_auth.is_some() {
-        Err("Form auth URL specified but no authentication method provided".to_string())
-    } else {
-        Ok(None)
+        _ => Err(format!(
+            "Unknown auth method: '{}'. Supported: basic, bearer, apikey, cookie",
+            method
+        )),
     }
 }
 
@@ -815,7 +759,7 @@ async fn main() {
     let result = combined_result;
 
     // Apply fuzzing if enabled
-    if args.fuzz || args.fuzz_params || args.fuzz_endpoints {
+    if args.fuzz && args.fuzz_level != "off" {
         // Extract unique URLs from crawled pages
         let mut discovered_urls: Vec<Url> =
             result.pages.iter().map(|page| page.url.clone()).collect();
@@ -828,8 +772,6 @@ async fn main() {
         let fuzzed_urls = apply_fuzzing(
             &discovered_urls,
             args.fuzz,
-            args.fuzz_params,
-            args.fuzz_endpoints,
             &args.fuzz_level,
         );
 
@@ -845,14 +787,30 @@ async fn main() {
     if args.baseline.is_some() || args.compare.is_some() {
         use hazler_core::{DifferConfig, ResponseDiffer};
 
+        // Parse cluster mode
+        let cluster_mode = match parse_cluster_mode(&args.cluster) {
+            Ok(mode) => mode,
+            Err(e) => {
+                error!("Invalid cluster mode: {}", e);
+                process::exit(1);
+            }
+        };
+
+        let (enable_clustering, clustering_algorithm, num_clusters, dbscan_epsilon, dbscan_min_points) = match cluster_mode {
+            ClusterMode::Off => (false, String::from("kmeans"), 5, 0.3, 2),
+            ClusterMode::Auto => (true, String::from("kmeans"), 5, 0.3, 2),  // Auto defaults to kmeans
+            ClusterMode::KMeans(n) => (true, String::from("kmeans"), n, 0.3, 2),
+            ClusterMode::DBSCAN(eps, min_pts) => (true, String::from("dbscan"), 5, eps, min_pts),
+        };
+
         let diff_config = DifferConfig {
             similarity_threshold: args.diff_threshold,
             enable_noise_filtering: true,
-            enable_clustering: args.cluster_responses,
-            clustering_algorithm: args.cluster_algorithm.clone(),
-            num_clusters: args.num_clusters,
-            dbscan_epsilon: 0.3,
-            dbscan_min_points: 2,
+            enable_clustering,
+            clustering_algorithm,
+            num_clusters,
+            dbscan_epsilon,
+            dbscan_min_points,
         };
 
         // Save baseline mode
@@ -946,7 +904,15 @@ async fn main() {
         }
 
         // Clustering mode (if enabled)
-        if args.cluster_responses {
+        let cluster_mode = match parse_cluster_mode(&args.cluster) {
+            Ok(mode) => mode,
+            Err(e) => {
+                error!("Invalid cluster mode: {}", e);
+                process::exit(1);
+            }
+        };
+
+        if !matches!(cluster_mode, ClusterMode::Off) {
             use hazler_core::{DBSCANClusterer, KMeansClusterer, SimHashCalculator};
 
             eprintln!("\n{}", "Response Clustering".bright_cyan().bold());
@@ -959,19 +925,21 @@ async fn main() {
                 .map(|page| (page.url.to_string(), calculator.calculate(&page.body)))
                 .collect();
 
-            let clusters = match args.cluster_algorithm.as_str() {
-                "kmeans" => {
-                    let clusterer = KMeansClusterer::new(args.num_clusters);
+            let clusters = match cluster_mode {
+                ClusterMode::KMeans(n) => {
+                    let clusterer = KMeansClusterer::new(n);
                     clusterer.cluster(&responses)
                 }
-                "dbscan" => {
-                    let clusterer = DBSCANClusterer::new(0.3, 2);
+                ClusterMode::DBSCAN(epsilon, min_pts) => {
+                    let clusterer = DBSCANClusterer::new(epsilon, min_pts);
                     clusterer.cluster(&responses)
                 }
-                _ => {
-                    error!("Invalid clustering algorithm: {}", args.cluster_algorithm);
-                    Vec::new()
+                ClusterMode::Auto => {
+                    // Auto mode: use kmeans with default 5 clusters
+                    let clusterer = KMeansClusterer::new(5);
+                    clusterer.cluster(&responses)
                 }
+                ClusterMode::Off => Vec::new(),  // Should not reach here
             };
 
             for cluster in &clusters {

@@ -5,7 +5,7 @@ use url::Url;
 fn bench_url_normalization(c: &mut Criterion) {
     let normalizer = AdvancedUrlNormalizer::new();
 
-    let test_urls = vec![
+    let test_urls = [
         "https://example.com/path/to/page?id=123&sort=asc",
         "https://example.com/PATH/TO/PAGE?sort=asc&id=123",
         "https://example.com/path/to/page/?id=123",

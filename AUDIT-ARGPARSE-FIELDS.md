@@ -67,11 +67,12 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
   - **Status:** ✅ SELESAI - Implemented in v0.2.0
   - **Note:** Auto-detection bekerja untuk Slack (hooks.slack.com) dan Discord (discord.com/api/webhooks)
 
-- [ ] **Pertimbangkan gabung --stats dan --report**
+- [x] **Pertimbangkan gabung --stats dan --report**
   - Opsi: `--report` otomatis include stats
-  - Atau: `--report {brief|full}` dimana brief = stats only, full = full report
+  - **Implementasi:** Removed --stats flag, summary always shown at end
   - **Benefit:** Mengurangi kebingungan tentang perbedaan stats vs report
   - **Impact:** Mengurangi 1 argument
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
 
 **Pengurangan Total:** 5-6 arguments → 8-9 arguments
 
@@ -95,6 +96,7 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
   - **Benefit:** Pattern konsisten untuk disabling features
   - **Trade-off:** Sedikit lebih verbose untuk single disable
   - **Alternative:** Tetap terpisah karena ini adalah frequently-used flags
+  - **Rekomendasi:** TIDAK DIIMPLEMENTASIKAN - flags ini frequently-used
   
 - [ ] **Pertimbangkan gabung --aggressive dan --all**
   - Opsi 1: `--mode {default|aggressive|comprehensive}` 
@@ -104,12 +106,14 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
   - Opsi 2: Tetap terpisah karena use case berbeda
   - **Rekomendasi:** TETAP TERPISAH - use case jelas berbeda
   
-- [ ] **--graphql-introspect bisa masuk ke --all atau --aggressive**
+- [x] **--graphql-introspect bisa masuk ke --all atau --aggressive**
   - Jika user pakai `--all`, GraphQL introspect otomatis enabled
   - Tetap bisa di-enable independently dengan `--graphql-introspect`
   - **Benefit:** Mengurangi flag yang perlu diingat untuk comprehensive scan
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
+  - **Note:** GraphQL introspection now auto-enabled with --all flag
 
-**Pengurangan Total:** Minimal (0-1 arguments) - area ini sudah cukup optimal
+**Pengurangan Total:** Minimal (0 arguments) - area ini sudah cukup optimal
 
 ---
 
@@ -121,12 +125,13 @@ Hazler versi 0.1.0 saat ini memiliki **60+ argparse/fields** yang membuat CLI me
 
 #### Rekomendasi Konsolidasi:
 
-- [ ] **Gabung ke single scope argument**
+- [x] **Gabung ke single scope argument**
   - Dari: `--strict-domain`, `--subs` (mutually exclusive)
   - Ke: `--scope {strict|same-domain|subdomains}`
   - Default: `same-domain` (current behavior without flags)
   - **Benefit:** Lebih jelas, menghindari mutually exclusive flags
   - **Impact:** Mengurangi 1 argument
+  - **Status:** ✅ SELESAI - Implemented in v0.2.0
 
 **Pengurangan Total:** 2 arguments → 1 argument
 

@@ -9,7 +9,7 @@ use tracing::{error, info, Level};
 use url::Url;
 
 mod output;
-use output::{generate_report, generate_stats, OutputFormatter};
+use output::{generate_report, OutputFormatter};
 
 mod html_report;
 use html_report::generate_html_report;
@@ -70,10 +70,6 @@ struct Args {
     #[arg(long)]
     fields: Option<String>,
 
-    /// Show crawl statistics
-    #[arg(long)]
-    stats: bool,
-
     /// Export results in various formats
     /// Format: TYPE:FILE where TYPE can be summary, html, pdf, sqlite, openapi, or postman
     /// Can be specified multiple times for multiple exports
@@ -122,6 +118,7 @@ struct Args {
     /// - Secret and sensitive data scanning
     /// - Framework detection
     /// - API endpoint mapping
+    /// - GraphQL introspection
     /// - Comprehensive reporting
     #[arg(long)]
     all: bool,
@@ -147,17 +144,16 @@ struct Args {
     #[arg(long)]
     proxy: Option<String>,
 
-    /// Enable strict domain mode - only crawl the exact domain (no subdomains)
-    /// When enabled, only the exact domain specified in the URL will be crawled
-    /// Example: If URL is example.com, sub.example.com will be excluded
-    #[arg(long)]
-    strict_domain: bool,
-
-    /// Allow subdomains - permits crawling of all subdomains of the target domain
-    /// Example: If URL is example.com, also crawl sub.example.com, api.example.com, etc.
-    /// Note: This is ignored if --strict-domain is enabled
-    #[arg(long)]
-    subs: bool,
+    /// Domain crawling scope
+    /// Controls which domains are crawled:
+    /// - strict: Only the exact domain (no subdomains)
+    /// - same-domain: Same domain without subdomains (default)
+    /// - subdomains: Include all subdomains
+    /// Examples:
+    ///   --scope strict  (example.com only, not sub.example.com)
+    ///   --scope subdomains  (example.com and sub.example.com)
+    #[arg(long, default_value = "same-domain", value_name = "MODE")]
+    scope: String,
 
     /// Enable headless browser for JavaScript-heavy sites (SPAs)
     /// Uses Chrome/Chromium via CDP to render pages with JavaScript
@@ -396,6 +392,14 @@ enum WebhookType {
     Generic,
 }
 
+/// Domain scoping mode for crawling
+#[derive(Debug, Clone, PartialEq)]
+enum ScopeMode {
+    Strict,        // Only exact domain
+    SameDomain,    // Same domain (default, no subdomains)
+    Subdomains,    // Include all subdomains
+}
+
 /// Detect webhook type from URL pattern
 fn detect_webhook_type(url: &str) -> WebhookType {
     if url.contains("hooks.slack.com") {
@@ -416,6 +420,19 @@ fn parse_webhook_type(type_str: &str) -> Result<WebhookType, String> {
         _ => Err(format!(
             "Unknown webhook type: '{}'. Supported types: slack, discord, generic",
             type_str
+        )),
+    }
+}
+
+/// Parse scope mode from string
+fn parse_scope_mode(scope_str: &str) -> Result<ScopeMode, String> {
+    match scope_str.to_lowercase().as_str() {
+        "strict" => Ok(ScopeMode::Strict),
+        "same-domain" | "same_domain" => Ok(ScopeMode::SameDomain),
+        "subdomains" | "subs" => Ok(ScopeMode::Subdomains),
+        _ => Err(format!(
+            "Unknown scope mode: '{}'. Supported modes: strict, same-domain, subdomains",
+            scope_str
         )),
     }
 }
@@ -684,10 +701,24 @@ async fn main() {
     config = config.stealth(enable_stealth);
 
     // Apply scope control options
-    if args.strict_domain {
-        config = config.strict_domain(true);
-    } else if args.subs {
-        config = config.allow_subdomains(true);
+    let scope_mode = match parse_scope_mode(&args.scope) {
+        Ok(mode) => mode,
+        Err(e) => {
+            error!("Invalid scope mode: {}", e);
+            process::exit(1);
+        }
+    };
+    
+    match scope_mode {
+        ScopeMode::Strict => {
+            config = config.strict_domain(true);
+        }
+        ScopeMode::SameDomain => {
+            // Default behavior - no additional config needed
+        }
+        ScopeMode::Subdomains => {
+            config = config.allow_subdomains(true);
+        }
     }
 
     // Apply proxy if provided
@@ -712,7 +743,9 @@ async fn main() {
     }
 
     // Apply GraphQL and Source Map settings
-    config = config.graphql_introspect(args.graphql_introspect);
+    // GraphQL introspection is automatically enabled with --all, or can be enabled independently
+    let enable_graphql = args.graphql_introspect || args.all;
+    config = config.graphql_introspect(enable_graphql);
     config = config.parse_source_maps(!args.no_source_maps);
 
     // Create and run crawler (mutable to support browser initialization)
@@ -1003,11 +1036,8 @@ async fn main() {
     }
 
     // Generate report if requested (to stderr, doesn't interfere with output)
-    // Note: This is kept separate for backward compatibility and console output
-    // The --export summary:file option writes the same report to a file
-    if args.stats {
-        eprintln!("{}", generate_stats(&result));
-    }
+    // Note: Stats are always shown at the end (after results output)
+    // The --export summary:file option writes the full report to a file
 
     // Handle exports using the new consolidated --export argument
     if !args.export.is_empty() {
@@ -1169,9 +1199,8 @@ async fn main() {
         }
     }
 
-    // Print summary to stderr (unless --stats was used)
-    if !args.stats {
-        eprintln!("\n{}", "═".repeat(80).bright_blue());
+    // Print summary to stderr (always shown after results output)
+    eprintln!("\n{}", "═".repeat(80).bright_blue());
         eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
         eprintln!("{}", "═".repeat(80).bright_blue());
         eprintln!(
@@ -1225,5 +1254,4 @@ async fn main() {
         }
 
         eprintln!("{}\n", "═".repeat(80).bright_blue());
-    }
 }

@@ -358,7 +358,7 @@ enum ClusterMode {
     Off,
     Auto,
     KMeans(usize),      // K-means with N clusters
-    Dbscan(f64, usize), // DBSCAN with epsilon and min_points
+    Dbscan(f64, usize), // Dbscan clustering with epsilon and min_points
 }
 
 /// Detect webhook type from URL pattern

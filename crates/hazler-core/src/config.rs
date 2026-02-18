@@ -59,6 +59,8 @@ pub struct Config {
     pub parse_source_maps: bool,
     /// Authentication configuration file path
     pub auth_config_file: Option<String>,
+    /// Quiet mode - only output 200 status codes in real-time
+    pub quiet_mode: bool,
 }
 
 impl Default for Config {
@@ -84,6 +86,7 @@ impl Default for Config {
             graphql_introspect: false,
             parse_source_maps: true, // Enable source map parsing by default
             auth_config_file: None,
+            quiet_mode: false,
         }
     }
 }
@@ -416,6 +419,24 @@ impl Config {
     /// ```
     pub fn auth_config_file(mut self, path: String) -> Self {
         self.auth_config_file = Some(path);
+        self
+    }
+
+    /// Enable or disable quiet mode
+    ///
+    /// When enabled, only URLs with 200 status code are displayed in real-time.
+    /// This reduces noise from false positives like soft forbidden or modified 404 pages.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// let config = Config::new().quiet_mode(true);
+    /// assert!(config.quiet_mode);
+    /// ```
+    pub fn quiet_mode(mut self, enabled: bool) -> Self {
+        self.quiet_mode = enabled;
         self
     }
 }

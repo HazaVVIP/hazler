@@ -100,9 +100,20 @@ struct Args {
     #[arg(long, value_name = "TYPE")]
     webhook_type: Option<String>,
 
-    /// Verbose output
+    /// Verbose output (for debugging)
     #[arg(short = 'v', long)]
     verbose: bool,
+
+    /// Show full output with tree view and statistics
+    /// By default, only URLs with 200 status are shown in real-time
+    /// Use this flag to see detailed tree view, stats, and all status codes
+    #[arg(long)]
+    full_output: bool,
+
+    /// Interactive wizard mode - guides you through configuration options
+    /// Perfect for beginners to set up crawling parameters step by step
+    #[arg(short = 'w', long)]
+    wizard: bool,
 
     /// Enable aggressive endpoint discovery mode
     /// - Applies regex patterns to JavaScript files
@@ -532,9 +543,157 @@ fn parse_auth_spec(spec: &str) -> Result<AuthMethod, String> {
     }
 }
 
+/// Run interactive wizard mode to help users configure crawling
+fn run_wizard() -> Args {
+    use std::io::{self, Write};
+
+    println!("\n{}", "🧙 HAZLER WIZARD MODE".bright_cyan().bold());
+    println!("{}\n", "═".repeat(50).bright_blue());
+
+    let mut url_input = String::new();
+    let mut depth_input = String::new();
+    let mut pages_input = String::new();
+    let mut secrets_input = String::new();
+    let mut format_input = String::new();
+
+    // Get target URL
+    print!(
+        "{} ",
+        "Enter target URL (e.g., https://example.com):".bright_white()
+    );
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin()
+        .read_line(&mut url_input)
+        .expect("Failed to read user input");
+    let url = url_input.trim().to_string();
+
+    // Get crawl depth
+    print!(
+        "{} ",
+        "Maximum crawl depth (1-10, default 3):".bright_white()
+    );
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin()
+        .read_line(&mut depth_input)
+        .expect("Failed to read user input");
+    let max_depth: usize = depth_input.trim().parse().unwrap_or(3).clamp(1, 10);
+
+    // Get max pages
+    print!(
+        "{} ",
+        "Maximum pages to crawl (0 for unlimited, default 0):".bright_white()
+    );
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin()
+        .read_line(&mut pages_input)
+        .expect("Failed to read user input");
+    let max_pages: usize = pages_input.trim().parse().unwrap_or(0);
+
+    // Ask about secret scanning
+    print!(
+        "{} ",
+        "Enable secret scanning? (y/n, default y):".bright_white()
+    );
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin()
+        .read_line(&mut secrets_input)
+        .expect("Failed to read user input");
+    let no_secrets = secrets_input.trim().to_lowercase() == "n";
+
+    // Output format options
+    const FORMAT_URLS: &str = "urls";
+    const FORMAT_TREE: &str = "tree";
+    const FORMAT_JSON: &str = "json";
+    const FORMAT_CSV: &str = "csv";
+
+    // Ask about output format
+    println!("\n{}", "Output format options:".yellow());
+    println!("  1. Clean URLs only (default) - Only successful URLs");
+    println!("  2. Tree view - Visual hierarchy");
+    println!("  3. JSON - Machine readable");
+    println!("  4. CSV - Spreadsheet format");
+    print!("{} ", "Choose format (1-4, default 1):".bright_white());
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin()
+        .read_line(&mut format_input)
+        .expect("Failed to read user input");
+    let (output_format, full_output) = match format_input.trim() {
+        "2" => (FORMAT_TREE.to_string(), true),
+        "3" => (FORMAT_JSON.to_string(), true),
+        "4" => (FORMAT_CSV.to_string(), true),
+        _ => (FORMAT_URLS.to_string(), false),
+    };
+
+    println!("\n{}", "Configuration Summary:".green().bold());
+    println!("  URL: {}", url.cyan());
+    println!("  Max Depth: {}", max_depth);
+    println!(
+        "  Max Pages: {}",
+        if max_pages == 0 {
+            "unlimited".to_string()
+        } else {
+            max_pages.to_string()
+        }
+    );
+    println!(
+        "  Secret Scanning: {}",
+        if no_secrets { "disabled" } else { "enabled" }
+    );
+    println!("  Output Format: {}", output_format);
+    println!();
+
+    Args {
+        url,
+        max_depth,
+        concurrency: 10,
+        max_pages,
+        user_agent: "Hazler/0.1.0".to_string(),
+        timeout: 10,
+        output_format,
+        include_body: false,
+        fields: None,
+        export: Vec::new(),
+        webhook: None,
+        webhook_type: None,
+        verbose: false,
+        full_output,
+        wizard: false, // Already in wizard mode
+        aggressive: false,
+        all: false,
+        no_stealth: false,
+        no_secrets,
+        proxy: None,
+        scope: "same-domain".to_string(),
+        browser: false,
+        screenshot_path: None,
+        disable_images: false,
+        graphql_introspect: false,
+        no_source_maps: false,
+        fuzz: false,
+        fuzz_level: "off".to_string(),
+        baseline: None,
+        compare: None,
+        diff_threshold: 0.85,
+        cluster: "off".to_string(),
+        resume: None,
+        auto_save: 60,
+        max_retries: 3,
+        circuit_breaker: false,
+        rate_limit: 10.0,
+        progress: 5,
+        auth: Vec::new(),
+        auth_file: None,
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    let args = Args::parse();
+    let mut args = Args::parse();
+
+    // If wizard mode is requested, run interactive wizard
+    if args.wizard {
+        args = run_wizard();
+    }
 
     // Setup logging
     let log_level = if args.verbose {
@@ -700,6 +859,10 @@ async fn main() {
     let enable_graphql = args.graphql_introspect || args.all;
     config = config.graphql_introspect(enable_graphql);
     config = config.parse_source_maps(!args.no_source_maps);
+
+    // Apply quiet mode (default is quiet unless --full-output is specified)
+    let quiet_mode = !args.full_output;
+    config = config.quiet_mode(quiet_mode);
 
     // Create and run crawler (mutable to support browser initialization)
     let mut crawler = match Crawler::new(config) {
@@ -1129,7 +1292,14 @@ async fn main() {
     let exclude_body = !args.include_body;
     let formatter = OutputFormatter::new(exclude_body, args.fields);
 
-    // Output results based on format
+    // In quiet mode (default), skip final output as URLs with 200 status were already printed in real-time
+    // Use --full-output to see detailed tree view and statistics
+    if quiet_mode {
+        // Exit silently, URLs were already printed during crawl
+        return;
+    }
+
+    // Output results based on format (only when --full-output is used)
     match args.output_format.as_str() {
         "json" => match formatter.format_json(&result) {
             Ok(json) => println!("{}", json),

@@ -4,7 +4,9 @@ A fast, efficient, and human-friendly web crawler built in Rust with built-in se
 
 ## ✨ Key Features
 
-- ✅ **Human-Friendly Output** - Beautiful tree view with colors and clear formatting (default)
+- ✅ **Clean Output by Default** - Shows only successful URLs (200 status) for easy reading and processing
+- ✅ **Interactive Wizard Mode** - Perfect for beginners to set up crawling step by step
+- ✅ **Smart Noise Filtering** - Automatically filters false positives from WAF blocks and modified 404 pages
 - ✅ **Stealth Mode** - WAF evasion enabled by default for better success rates
 - ✅ **Secret Scanning** - Automatic detection of API keys, tokens, and credentials (enabled by default)
 - ✅ **Headless Browser Support** - Crawl modern SPAs (React, Vue, Angular) with JavaScript execution
@@ -144,6 +146,23 @@ hazler --version
 
 ## Quick Start
 
+### For Beginners: Interactive Wizard Mode
+
+If you're new to Hazler, start with the interactive wizard:
+
+```bash
+hazler --wizard
+```
+
+The wizard will guide you through:
+- Entering the target URL
+- Setting crawl depth (how deep to go)
+- Choosing maximum pages to crawl
+- Enabling/disabling secret scanning
+- Selecting output format
+
+Perfect for first-time users!
+
 ### Your First Crawl
 
 Start with a simple crawl of a website:
@@ -153,12 +172,29 @@ hazler https://example.com
 ```
 
 This will crawl `example.com` with:
-- **Human-friendly tree output** with colors and status indicators
+- **Clean output showing only successful URLs (200 status)** - Perfect for piping to other tools
+- **Smart noise filtering** - Automatically removes false positives from WAF blocks and modified 404 pages
 - **Stealth mode enabled** for better success rates and WAF evasion
 - **Secret scanning enabled** to detect sensitive data leaks
 - Default depth of 3 and concurrency of 10
 
-The output will show a beautiful tree view like:
+The output will show clean URLs like:
+```
+https://example.com/
+https://example.com/about
+https://example.com/contact
+https://example.com/api/users
+```
+
+### Want Detailed Output?
+
+Use `--full-output` to see the beautiful tree view with statistics:
+
+```bash
+hazler https://example.com --full-output
+```
+
+This shows:
 ```
 🌐 HAZLER CRAWL RESULTS
 ✓ [200] https://example.com/ (15 links)
@@ -257,7 +293,7 @@ Options:
   -p, --max-pages <MAX_PAGES>          Maximum number of pages to crawl (0 = unlimited) [default: 0]
   -u, --user-agent <USER_AGENT>        Custom user agent string [default: Hazler/0.1.0]
   -t, --timeout <TIMEOUT>              Request timeout in seconds [default: 10]
-  -o, --output-format <OUTPUT_FORMAT>  Output format (json, jsonl, urls, csv, tree, nuclei, ffuf, or burp) [default: tree]
+  -o, --output-format <OUTPUT_FORMAT>  Output format (json, jsonl, urls, csv, tree, nuclei, ffuf, or burp) [default: urls]
       --include-body                   Include response body in output (excluded by default)
       --fields <FIELDS>                Select specific fields to output (comma-separated)
       --aggressive                     Enable aggressive endpoint discovery mode
@@ -273,36 +309,50 @@ Options:
       --browser                        Enable headless browser for JavaScript-heavy sites (SPAs)
       --screenshot-path <PATH>         Save screenshots when using browser
       --disable-images                 Disable images in browser for faster loading
-  -v, --verbose                        Verbose output
+  -v, --verbose                        Verbose output (for debugging)
+  -w, --wizard                         Interactive wizard mode - perfect for beginners
+      --full-output                    Show full output with tree view and statistics
   -h, --help                           Print help
   -V, --version                        Print version
 ```
 
 ### Examples
 
-Basic crawl with human-friendly output (default):
+**Interactive wizard mode (perfect for beginners):**
+```bash
+hazler --wizard
+```
+
+**Basic crawl with clean output (default - shows only successful URLs):**
 ```bash
 hazler https://example.com
 ```
+Output: Clean list of successful URLs, automatically filtered from noise.
 
-Comprehensive scan with all features enabled:
+**Full detailed output with tree view and statistics:**
+```bash
+hazler https://example.com --full-output
+```
+Shows beautiful tree view with colors, status codes, and complete statistics.
+
+**Comprehensive scan with all features enabled:**
 ```bash
 hazler https://example.com --all
 ```
 
-Crawl with custom depth and concurrency:
+**Crawl with custom depth and concurrency:**
 ```bash
 hazler https://example.com -d 2 -c 5
 ```
 
-Limit to 100 pages:
+**Limit to 100 pages:**
 ```bash
 hazler https://example.com -p 100
 ```
 
-Get detailed statistics:
+**Get detailed statistics:**
 ```bash
-hazler https://example.com --stats
+hazler https://example.com --full-output
 ```
 
 Generate comprehensive report with security findings:

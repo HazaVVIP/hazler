@@ -241,6 +241,11 @@ impl Crawler {
                     Ok(Ok((page, new_urls))) => {
                         result.total_pages += 1;
 
+                        // In quiet mode, only output URLs with 200 status code in real-time
+                        if self.config.quiet_mode && page.status_code == 200 {
+                            println!("{}", page.url);
+                        }
+
                         // Add new URLs to queue
                         for (new_url, new_depth) in new_urls {
                             if queue.push(new_url, new_depth) {

@@ -5,6 +5,7 @@ A fast, efficient, and human-friendly web crawler built in Rust with built-in se
 ## ✨ Key Features
 
 - ✅ **Human-Friendly Output** - Beautiful tree view with colors and clear formatting (default)
+- ✅ **Quiet Mode** - Clean output showing only successful URLs (200 status) with automatic false positive filtering
 - ✅ **Stealth Mode** - WAF evasion enabled by default for better success rates
 - ✅ **Secret Scanning** - Automatic detection of API keys, tokens, and credentials (enabled by default)
 - ✅ **Headless Browser Support** - Crawl modern SPAs (React, Vue, Angular) with JavaScript execution
@@ -274,6 +275,7 @@ Options:
       --screenshot-path <PATH>         Save screenshots when using browser
       --disable-images                 Disable images in browser for faster loading
   -v, --verbose                        Verbose output
+  -q, --quiet                          Quiet mode - only show URLs with 200 status code in real-time
   -h, --help                           Print help
   -V, --version                        Print version
 ```
@@ -284,6 +286,16 @@ Basic crawl with human-friendly output (default):
 ```bash
 hazler https://example.com
 ```
+
+Quiet mode - only show successful URLs (200 status) in real-time:
+```bash
+hazler https://example.com --quiet
+```
+This mode is useful for:
+- Reducing noise from WAF blocks, soft forbidden, and modified 404 pages
+- Getting clean URL list output for further processing
+- Background crawling with minimal output
+- Automatically filters false positives using content-length pattern detection (threshold: 5)
 
 Comprehensive scan with all features enabled:
 ```bash

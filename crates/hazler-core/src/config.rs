@@ -433,7 +433,7 @@ impl Config {
     /// use hazler_core::Config;
     ///
     /// let config = Config::new().quiet_mode(true);
-    /// assert_eq!(config.quiet_mode, true);
+    /// assert!(config.quiet_mode);
     /// ```
     pub fn quiet_mode(mut self, enabled: bool) -> Self {
         self.quiet_mode = enabled;

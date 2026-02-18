@@ -550,35 +550,41 @@ fn run_wizard() -> Args {
     println!("\n{}", "🧙 HAZLER WIZARD MODE".bright_cyan().bold());
     println!("{}\n", "═".repeat(50).bright_blue());
     
-    let mut url = String::new();
-    let mut max_depth = String::new();
-    let mut max_pages = String::new();
-    let mut scan_secrets = String::new();
-    let mut output_format = String::new();
+    let mut url_input = String::new();
+    let mut depth_input = String::new();
+    let mut pages_input = String::new();
+    let mut secrets_input = String::new();
+    let mut format_input = String::new();
     
     // Get target URL
     print!("{} ", "Enter target URL (e.g., https://example.com):".bright_white());
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut url).unwrap();
-    let url = url.trim().to_string();
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin().read_line(&mut url_input).expect("Failed to read user input");
+    let url = url_input.trim().to_string();
     
     // Get crawl depth
     print!("{} ", "Maximum crawl depth (1-10, default 3):".bright_white());
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut max_depth).unwrap();
-    let max_depth: usize = max_depth.trim().parse().unwrap_or(3).clamp(1, 10);
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin().read_line(&mut depth_input).expect("Failed to read user input");
+    let max_depth: usize = depth_input.trim().parse().unwrap_or(3).clamp(1, 10);
     
     // Get max pages
     print!("{} ", "Maximum pages to crawl (0 for unlimited, default 0):".bright_white());
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut max_pages).unwrap();
-    let max_pages: usize = max_pages.trim().parse().unwrap_or(0);
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin().read_line(&mut pages_input).expect("Failed to read user input");
+    let max_pages: usize = pages_input.trim().parse().unwrap_or(0);
     
     // Ask about secret scanning
     print!("{} ", "Enable secret scanning? (y/n, default y):".bright_white());
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut scan_secrets).unwrap();
-    let no_secrets = scan_secrets.trim().to_lowercase() == "n";
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin().read_line(&mut secrets_input).expect("Failed to read user input");
+    let no_secrets = secrets_input.trim().to_lowercase() == "n";
+    
+    // Output format options
+    const FORMAT_URLS: &str = "urls";
+    const FORMAT_TREE: &str = "tree";
+    const FORMAT_JSON: &str = "json";
+    const FORMAT_CSV: &str = "csv";
     
     // Ask about output format
     println!("\n{}", "Output format options:".yellow());
@@ -587,13 +593,13 @@ fn run_wizard() -> Args {
     println!("  3. JSON - Machine readable");
     println!("  4. CSV - Spreadsheet format");
     print!("{} ", "Choose format (1-4, default 1):".bright_white());
-    io::stdout().flush().unwrap();
-    io::stdin().read_line(&mut output_format).unwrap();
-    let (output_format, full_output) = match output_format.trim() {
-        "2" => ("tree".to_string(), true),
-        "3" => ("json".to_string(), true),
-        "4" => ("csv".to_string(), true),
-        _ => ("urls".to_string(), false),
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin().read_line(&mut format_input).expect("Failed to read user input");
+    let (output_format, full_output) = match format_input.trim() {
+        "2" => (FORMAT_TREE.to_string(), true),
+        "3" => (FORMAT_JSON.to_string(), true),
+        "4" => (FORMAT_CSV.to_string(), true),
+        _ => (FORMAT_URLS.to_string(), false),
     };
     
     println!("\n{}", "Configuration Summary:".green().bold());

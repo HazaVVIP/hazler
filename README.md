@@ -352,7 +352,7 @@ hazler https://example.com -p 100
 
 **Get detailed statistics:**
 ```bash
-hazler https://example.com --stats --full-output
+hazler https://example.com --full-output
 ```
 
 Generate comprehensive report with security findings:

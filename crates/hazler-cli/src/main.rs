@@ -104,6 +104,12 @@ struct Args {
     #[arg(short = 'v', long)]
     verbose: bool,
 
+    /// Quiet mode - only show URLs with 200 status code in real-time
+    /// Runs crawling in background and filters out noise from soft forbidden/modified 404 pages
+    /// Uses content-length patterns to detect false positives
+    #[arg(short = 'q', long)]
+    quiet: bool,
+
     /// Enable aggressive endpoint discovery mode
     /// - Applies regex patterns to JavaScript files
     /// - Generates URL variations
@@ -701,6 +707,9 @@ async fn main() {
     config = config.graphql_introspect(enable_graphql);
     config = config.parse_source_maps(!args.no_source_maps);
 
+    // Apply quiet mode
+    config = config.quiet_mode(args.quiet);
+
     // Create and run crawler (mutable to support browser initialization)
     let mut crawler = match Crawler::new(config) {
         Ok(c) => c,
@@ -1128,6 +1137,12 @@ async fn main() {
     // Create output formatter (exclude_body is true by default, unless --include-body is specified)
     let exclude_body = !args.include_body;
     let formatter = OutputFormatter::new(exclude_body, args.fields);
+
+    // In quiet mode, skip final output as URLs with 200 status were already printed in real-time
+    if args.quiet {
+        // Exit silently, URLs were already printed during crawl
+        return;
+    }
 
     // Output results based on format
     match args.output_format.as_str() {

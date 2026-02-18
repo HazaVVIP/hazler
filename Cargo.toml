@@ -39,6 +39,11 @@ regex = "1.10"
 once_cell = "1.19"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 
+# IMPORTANT: Do not update native-tls beyond v0.2.14
+# v0.2.17 has a compilation error due to incomplete pattern matching for Protocol::Tlsv13
+# The transitive dependency is currently pinned to v0.2.14 in Cargo.lock
+# See: https://github.com/sfackler/rust-native-tls/issues/284
+
 [profile.release]
 opt-level = 3
 lto = true

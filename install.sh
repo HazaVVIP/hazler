@@ -250,10 +250,12 @@ install_hazler() {
         print_info "Building and installing from local source..."
         # cargo install handles both compilation and installation efficiently
         # This avoids the double compilation that would occur with 'cargo build' followed by 'cargo install'
-        cargo install --path crates/hazler-cli
+        # Use --locked to respect Cargo.lock (important for pinned dependencies like native-tls v0.2.14)
+        cargo install --path crates/hazler-cli --locked
     else
         print_info "Installing from GitHub..."
-        cargo install --git https://github.com/HazaVVIP/hazler hazler-cli
+        # Use --locked to respect the Cargo.lock from the repository
+        cargo install --git https://github.com/HazaVVIP/hazler hazler-cli --locked
     fi
     
     print_success "Hazler installed successfully"

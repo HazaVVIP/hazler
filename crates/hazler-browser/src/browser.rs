@@ -200,14 +200,14 @@ impl Browser {
         });
 
         // Navigate to the target URL with retry logic
-        let mut retry_count = 0;
+        let mut attempt_count = 0;
         let timeout = std::time::Duration::from_secs(self.config.timeout_secs);
 
         loop {
-            retry_count += 1;
+            attempt_count += 1;
             debug!(
                 "Navigation attempt {} of {}",
-                retry_count, MAX_NAVIGATION_RETRIES
+                attempt_count, MAX_NAVIGATION_RETRIES
             );
 
             // Navigate to the URL
@@ -217,10 +217,10 @@ impl Browser {
                 }
                 Err(e) => {
                     warn!("Failed to navigate to {}: {}", url, e);
-                    if retry_count >= MAX_NAVIGATION_RETRIES {
+                    if attempt_count >= MAX_NAVIGATION_RETRIES {
                         return Err(BrowserError::NavigationError(format!(
                             "Failed to navigate after {} attempts: {}",
-                            MAX_NAVIGATION_RETRIES, e
+                            attempt_count, e
                         )));
                     }
                     tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
@@ -235,10 +235,10 @@ impl Browser {
                 }
                 Ok(Err(e)) => {
                     warn!("Navigation error: {}", e);
-                    if retry_count >= MAX_NAVIGATION_RETRIES {
+                    if attempt_count >= MAX_NAVIGATION_RETRIES {
                         warn!(
                             "Continuing despite navigation error after {} attempts",
-                            MAX_NAVIGATION_RETRIES
+                            attempt_count
                         );
                     } else {
                         tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
@@ -250,10 +250,10 @@ impl Browser {
                         "Navigation timeout after {} seconds",
                         self.config.timeout_secs
                     );
-                    if retry_count >= MAX_NAVIGATION_RETRIES {
+                    if attempt_count >= MAX_NAVIGATION_RETRIES {
                         warn!(
                             "Continuing despite timeout after {} attempts",
-                            MAX_NAVIGATION_RETRIES
+                            attempt_count
                         );
                     } else {
                         tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
@@ -267,10 +267,10 @@ impl Browser {
                 Ok(Some(current_url)) => {
                     if is_chrome_error_url(&current_url) {
                         warn!("Landed on chrome error page: {}", current_url);
-                        if retry_count >= MAX_NAVIGATION_RETRIES {
+                        if attempt_count >= MAX_NAVIGATION_RETRIES {
                             return Err(BrowserError::NavigationError(format!(
                                 "Navigation resulted in error page after {} attempts: {}",
-                                MAX_NAVIGATION_RETRIES, current_url
+                                attempt_count, current_url
                             )));
                         }
                         tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;

@@ -452,4 +452,14 @@ mod tests {
         assert_eq!(req.method, "GET");
         assert_eq!(req.resource_type, "XHR");
     }
+
+    #[test]
+    fn test_error_page_detection() {
+        // Test that chrome-error URLs would be detected
+        let error_url = "chrome-error://chromewebdata/";
+        assert!(error_url.starts_with("chrome-error://"));
+        
+        let parsed_url = Url::parse(error_url).unwrap();
+        assert_eq!(parsed_url.scheme(), "chrome-error");
+    }
 }

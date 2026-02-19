@@ -76,8 +76,8 @@ impl Browser {
     pub async fn load_page(&self, url: &Url) -> Result<PageLoadResult> {
         info!("Loading page with headless browser: {}", url);
 
-        // Create a new page
-        let page = self.chrome.new_page(url.as_str()).await.map_err(|e| {
+        // Create a blank page first (to avoid navigation issues in new_page)
+        let page = self.chrome.new_page("about:blank").await.map_err(|e| {
             BrowserError::PageCreationError(format!("Failed to create page: {}", e))
         })?;
 
@@ -188,22 +188,78 @@ impl Browser {
             }
         });
 
-        // Wait for page to load with timeout
+        // Navigate to the target URL with retry logic
+        let max_retries = 3;
+        let mut retry_count = 0;
         let timeout = std::time::Duration::from_secs(self.config.timeout_secs);
-
-        match tokio::time::timeout(timeout, page.wait_for_navigation()).await {
-            Ok(Ok(_)) => {
-                debug!("Page navigation completed");
+        
+        loop {
+            retry_count += 1;
+            debug!("Navigation attempt {} of {}", retry_count, max_retries);
+            
+            // Navigate to the URL
+            match page.goto(url.as_str()).await {
+                Ok(_) => {
+                    debug!("Navigation initiated successfully");
+                }
+                Err(e) => {
+                    warn!("Failed to navigate to {}: {}", url, e);
+                    if retry_count >= max_retries {
+                        return Err(BrowserError::NavigationError(format!(
+                            "Failed to navigate after {} attempts: {}",
+                            max_retries, e
+                        )));
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    continue;
+                }
             }
-            Ok(Err(e)) => {
-                warn!("Navigation error (continuing anyway): {}", e);
+            
+            // Wait for page to load with timeout
+            match tokio::time::timeout(timeout, page.wait_for_navigation()).await {
+                Ok(Ok(_)) => {
+                    debug!("Page navigation completed");
+                }
+                Ok(Err(e)) => {
+                    warn!("Navigation error: {}", e);
+                    if retry_count >= max_retries {
+                        warn!("Continuing despite navigation error after {} attempts", max_retries);
+                    } else {
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                }
+                Err(_) => {
+                    warn!(
+                        "Navigation timeout after {} seconds",
+                        self.config.timeout_secs
+                    );
+                    if retry_count >= max_retries {
+                        warn!("Continuing despite timeout after {} attempts", max_retries);
+                    } else {
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                }
             }
-            Err(_) => {
-                warn!(
-                    "Navigation timeout after {} seconds",
-                    self.config.timeout_secs
-                );
+            
+            // Check if we landed on an error page
+            if let Ok(Some(current_url)) = page.url().await {
+                if current_url.starts_with("chrome-error://") {
+                    warn!("Landed on chrome error page: {}", current_url);
+                    if retry_count >= max_retries {
+                        return Err(BrowserError::NavigationError(format!(
+                            "Navigation resulted in error page after {} attempts: {}",
+                            max_retries, current_url
+                        )));
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    continue;
+                }
             }
+            
+            // Navigation successful
+            break;
         }
 
         // Give additional time for dynamic content to load and network requests to complete
@@ -235,6 +291,14 @@ impl Browser {
 
         let final_url = Url::parse(&final_url)
             .map_err(|e| BrowserError::NavigationError(format!("Invalid URL: {}", e)))?;
+
+        // Final validation: ensure we didn't end up on an error page
+        if final_url.scheme() == "chrome-error" || final_url.as_str().starts_with("chrome-error://") {
+            return Err(BrowserError::NavigationError(format!(
+                "Navigation failed - ended up on error page: {}",
+                final_url
+            )));
+        }
 
         // Get captured network requests
         let captured_requests = network_requests.lock().await.clone();

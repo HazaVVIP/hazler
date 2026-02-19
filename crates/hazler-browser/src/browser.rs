@@ -192,11 +192,11 @@ impl Browser {
         let max_retries = 3;
         let mut retry_count = 0;
         let timeout = std::time::Duration::from_secs(self.config.timeout_secs);
-        
+
         loop {
             retry_count += 1;
             debug!("Navigation attempt {} of {}", retry_count, max_retries);
-            
+
             // Navigate to the URL
             match page.goto(url.as_str()).await {
                 Ok(_) => {
@@ -214,7 +214,7 @@ impl Browser {
                     continue;
                 }
             }
-            
+
             // Wait for page to load with timeout
             match tokio::time::timeout(timeout, page.wait_for_navigation()).await {
                 Ok(Ok(_)) => {
@@ -223,7 +223,10 @@ impl Browser {
                 Ok(Err(e)) => {
                     warn!("Navigation error: {}", e);
                     if retry_count >= max_retries {
-                        warn!("Continuing despite navigation error after {} attempts", max_retries);
+                        warn!(
+                            "Continuing despite navigation error after {} attempts",
+                            max_retries
+                        );
                     } else {
                         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         continue;
@@ -242,7 +245,7 @@ impl Browser {
                     }
                 }
             }
-            
+
             // Check if we landed on an error page
             if let Ok(Some(current_url)) = page.url().await {
                 if current_url.starts_with("chrome-error://") {
@@ -257,7 +260,7 @@ impl Browser {
                     continue;
                 }
             }
-            
+
             // Navigation successful
             break;
         }
@@ -293,7 +296,8 @@ impl Browser {
             .map_err(|e| BrowserError::NavigationError(format!("Invalid URL: {}", e)))?;
 
         // Final validation: ensure we didn't end up on an error page
-        if final_url.scheme() == "chrome-error" || final_url.as_str().starts_with("chrome-error://") {
+        if final_url.scheme() == "chrome-error" || final_url.as_str().starts_with("chrome-error://")
+        {
             return Err(BrowserError::NavigationError(format!(
                 "Navigation failed - ended up on error page: {}",
                 final_url
@@ -458,7 +462,7 @@ mod tests {
         // Test that chrome-error URLs would be detected
         let error_url = "chrome-error://chromewebdata/";
         assert!(error_url.starts_with("chrome-error://"));
-        
+
         let parsed_url = Url::parse(error_url).unwrap();
         assert_eq!(parsed_url.scheme(), "chrome-error");
     }

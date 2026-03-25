@@ -11,6 +11,17 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use url::Url;
 
+/// Maximum number of retries for page navigation
+const MAX_NAVIGATION_RETRIES: usize = 3;
+
+/// Delay in seconds between navigation retry attempts
+const RETRY_DELAY_SECS: u64 = 1;
+
+/// Helper function to check if a URL is a Chrome error page
+fn is_chrome_error_url(url_str: &str) -> bool {
+    url_str.starts_with("chrome-error://")
+}
+
 /// Headless browser client for crawling JavaScript-heavy sites
 pub struct Browser {
     chrome: ChromeBrowser,
@@ -76,8 +87,8 @@ impl Browser {
     pub async fn load_page(&self, url: &Url) -> Result<PageLoadResult> {
         info!("Loading page with headless browser: {}", url);
 
-        // Create a new page
-        let page = self.chrome.new_page(url.as_str()).await.map_err(|e| {
+        // Create a blank page first (to avoid navigation issues in new_page)
+        let page = self.chrome.new_page("about:blank").await.map_err(|e| {
             BrowserError::PageCreationError(format!("Failed to create page: {}", e))
         })?;
 
@@ -188,22 +199,94 @@ impl Browser {
             }
         });
 
-        // Wait for page to load with timeout
+        // Navigate to the target URL with retry logic
+        let mut attempt_count = 0;
         let timeout = std::time::Duration::from_secs(self.config.timeout_secs);
 
-        match tokio::time::timeout(timeout, page.wait_for_navigation()).await {
-            Ok(Ok(_)) => {
-                debug!("Page navigation completed");
+        loop {
+            attempt_count += 1;
+            debug!(
+                "Navigation attempt {} of {}",
+                attempt_count, MAX_NAVIGATION_RETRIES
+            );
+
+            // Navigate to the URL
+            match page.goto(url.as_str()).await {
+                Ok(_) => {
+                    debug!("Navigation initiated successfully");
+                }
+                Err(e) => {
+                    warn!("Failed to navigate to {}: {}", url, e);
+                    if attempt_count >= MAX_NAVIGATION_RETRIES {
+                        return Err(BrowserError::NavigationError(format!(
+                            "Failed to navigate after {} attempts: {}",
+                            attempt_count, e
+                        )));
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                    continue;
+                }
             }
-            Ok(Err(e)) => {
-                warn!("Navigation error (continuing anyway): {}", e);
+
+            // Wait for page to load with timeout
+            match tokio::time::timeout(timeout, page.wait_for_navigation()).await {
+                Ok(Ok(_)) => {
+                    debug!("Page navigation completed");
+                }
+                Ok(Err(e)) => {
+                    warn!("Navigation error: {}", e);
+                    if attempt_count >= MAX_NAVIGATION_RETRIES {
+                        warn!(
+                            "Continuing despite navigation error after {} attempts",
+                            attempt_count
+                        );
+                    } else {
+                        tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                        continue;
+                    }
+                }
+                Err(_) => {
+                    warn!(
+                        "Navigation timeout after {} seconds",
+                        self.config.timeout_secs
+                    );
+                    if attempt_count >= MAX_NAVIGATION_RETRIES {
+                        warn!(
+                            "Continuing despite timeout after {} attempts",
+                            attempt_count
+                        );
+                    } else {
+                        tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                        continue;
+                    }
+                }
             }
-            Err(_) => {
-                warn!(
-                    "Navigation timeout after {} seconds",
-                    self.config.timeout_secs
-                );
+
+            // Check if we landed on an error page
+            match page.url().await {
+                Ok(Some(current_url)) => {
+                    if is_chrome_error_url(&current_url) {
+                        warn!("Landed on chrome error page: {}", current_url);
+                        if attempt_count >= MAX_NAVIGATION_RETRIES {
+                            return Err(BrowserError::NavigationError(format!(
+                                "Navigation resulted in error page after {} attempts: {}",
+                                attempt_count, current_url
+                            )));
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                        continue;
+                    }
+                }
+                Ok(None) => {
+                    warn!("Could not retrieve current URL after navigation");
+                }
+                Err(e) => {
+                    warn!("Error retrieving current URL: {}", e);
+                }
             }
+
+            // Navigation successful
+            break;
         }
 
         // Give additional time for dynamic content to load and network requests to complete
@@ -235,6 +318,14 @@ impl Browser {
 
         let final_url = Url::parse(&final_url)
             .map_err(|e| BrowserError::NavigationError(format!("Invalid URL: {}", e)))?;
+
+        // Final validation: ensure we didn't end up on an error page
+        if is_chrome_error_url(final_url.as_str()) {
+            return Err(BrowserError::NavigationError(format!(
+                "Navigation failed - ended up on error page: {}",
+                final_url
+            )));
+        }
 
         // Get captured network requests
         let captured_requests = network_requests.lock().await.clone();
@@ -387,5 +478,19 @@ mod tests {
         assert_eq!(req.url, "https://api.example.com/users");
         assert_eq!(req.method, "GET");
         assert_eq!(req.resource_type, "XHR");
+    }
+
+    #[test]
+    fn test_error_page_detection() {
+        // Test that chrome-error URLs would be detected
+        let error_url = "chrome-error://chromewebdata/";
+        assert!(is_chrome_error_url(error_url));
+
+        // Test normal URLs are not detected as errors
+        assert!(!is_chrome_error_url("https://example.com"));
+        assert!(!is_chrome_error_url("http://api.robinhood.com"));
+
+        let parsed_url = Url::parse(error_url).unwrap();
+        assert_eq!(parsed_url.scheme(), "chrome-error");
     }
 }

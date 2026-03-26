@@ -1138,16 +1138,16 @@ pub struct CircuitBreaker {
 - [x] Performance optimization (SimHash O(n) complexity)
 - [x] Documentation
 
-#### Week 11: Entropy Detection
-- [ ] Implement Shannon entropy calculation
-- [ ] Add high-entropy string detection
-- [ ] Tune threshold values (4.5 bits)
-- [ ] Integrate with existing secret scanner
-- [ ] Add context extraction
-- [ ] Implement false positive reduction
-- [ ] Test with real secrets and non-secrets
-- [ ] Update tests
-- [ ] Documentation
+#### Week 11: Entropy Detection ✅ COMPLETED (Mar 26, 2026)
+- [x] Implement Shannon entropy calculation
+- [x] Add high-entropy string detection
+- [x] Tune threshold values (4.5 bits)
+- [x] Integrate with existing secret scanner
+- [x] Add context extraction
+- [x] Implement false positive reduction
+- [x] Test with real secrets and non-secrets
+- [x] Update tests
+- [x] Documentation
 
 #### Weeks 12-13: Smart Fuzzing ✅ COMPLETED (Feb 15, 2026)
 - [x] Create `hazler-fuzzer` crate

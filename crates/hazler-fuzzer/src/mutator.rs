@@ -1,9 +1,14 @@
 //! URL mutation engine for generating URL variations
 
 use crate::config::FuzzerConfig;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashSet;
 use url::Url;
+
+/// Pre-compiled regex for detecting existing API version prefixes.
+static VERSION_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"/v\d+/").expect("Failed to compile version regex"));
 
 /// Type of mutation applied to a URL
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -79,7 +84,7 @@ impl UrlMutator {
         let mut mutations = Vec::new();
         let path = url.path();
 
-        // Split path into segments
+        // Split path into segments (kept as a slice for indexed access).
         let segments: Vec<&str> = path.split('/').collect();
 
         for (i, segment) in segments.iter().enumerate() {
@@ -89,11 +94,20 @@ impl UrlMutator {
 
             let plural = self.pluralize(segment);
             if plural != *segment {
-                let mut new_segments = segments.clone();
-                new_segments[i] = &plural;
-                let new_path = new_segments.join("/");
+                // Build the new path directly without cloning the segments Vec.
+                let mut new_path = String::with_capacity(path.len() + plural.len());
+                for (j, seg) in segments.iter().enumerate() {
+                    if j > 0 {
+                        new_path.push('/');
+                    }
+                    if j == i {
+                        new_path.push_str(&plural);
+                    } else {
+                        new_path.push_str(seg);
+                    }
+                }
 
-                if let Ok(mut new_url) = url.clone().join(&new_path) {
+                if let Ok(mut new_url) = url.join(&new_path) {
                     // Preserve query and fragment
                     new_url.set_query(url.query());
                     new_url.set_fragment(url.fragment());
@@ -205,9 +219,8 @@ impl UrlMutator {
         let mut mutations = Vec::new();
         let path = url.path();
 
-        // Check if version already exists
-        let version_regex = Regex::new(r"/v\d+/").unwrap();
-        if version_regex.is_match(path) {
+        // Use the pre-compiled static regex instead of recompiling on every call.
+        if VERSION_RE.is_match(path) {
             return mutations;
         }
 

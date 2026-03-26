@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::framework::{detect_framework, get_framework_patterns, Framework};
+use crate::framework::{detect_framework, get_compiled_framework_patterns, Framework};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashSet;
@@ -120,22 +120,21 @@ impl JavaScriptParser {
         base_url: &Url,
         framework: &Framework,
     ) -> Option<Vec<Url>> {
-        let patterns = get_framework_patterns(framework);
+        // Use pre-compiled regexes to avoid re-compiling on every call.
+        let patterns = get_compiled_framework_patterns(framework);
         if patterns.is_empty() {
             return None;
         }
 
         let mut endpoints = Vec::new();
 
-        for pattern_str in patterns {
-            if let Ok(pattern) = Regex::new(&pattern_str) {
-                for cap in pattern.captures_iter(js_content) {
-                    for i in 1..cap.len() {
-                        if let Some(url_match) = cap.get(i) {
-                            let url_str = url_match.as_str();
-                            if let Ok(url) = self.normalize_and_resolve(url_str, base_url) {
-                                endpoints.push(url);
-                            }
+        for pattern in patterns {
+            for cap in pattern.captures_iter(js_content) {
+                for i in 1..cap.len() {
+                    if let Some(url_match) = cap.get(i) {
+                        let url_str = url_match.as_str();
+                        if let Ok(url) = self.normalize_and_resolve(url_str, base_url) {
+                            endpoints.push(url);
                         }
                     }
                 }

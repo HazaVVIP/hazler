@@ -22,9 +22,12 @@
 //! }
 //! ```
 
+pub mod context;
+pub mod entropy;
 pub mod error;
 pub mod patterns;
 pub mod scanner;
 
+pub use entropy::{calculate_entropy, EntropyFinding, EntropyScanner};
 pub use error::SecretError;
 pub use scanner::{Finding, SecretScanner, Severity};

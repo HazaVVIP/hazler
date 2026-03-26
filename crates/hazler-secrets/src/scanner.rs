@@ -1,5 +1,6 @@
 //! Secret scanner implementation
 
+use crate::entropy::{EntropyFinding, EntropyScanner};
 use crate::patterns;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -50,6 +51,7 @@ pub struct Finding {
 #[derive(Clone)]
 pub struct SecretScanner {
     patterns: Vec<(String, Regex, String, String)>,
+    entropy_scanner: EntropyScanner,
 }
 
 impl SecretScanner {
@@ -57,7 +59,10 @@ impl SecretScanner {
     pub fn new() -> Self {
         let patterns = patterns::compile_patterns().expect("Failed to compile secret patterns");
 
-        SecretScanner { patterns }
+        SecretScanner {
+            patterns,
+            entropy_scanner: EntropyScanner::new(),
+        }
     }
 
     /// Scan text for secrets and sensitive information
@@ -139,6 +144,21 @@ impl SecretScanner {
                 }
             }
         }
+    }
+
+    /// Scan text using both regex patterns and entropy analysis.
+    ///
+    /// Returns regex-based [`Finding`]s alongside entropy-based [`EntropyFinding`]s.
+    /// Entropy findings complement regex findings by catching secrets that do not
+    /// match any known pattern.
+    pub fn scan_with_entropy(
+        &self,
+        text: &str,
+        location: &str,
+    ) -> (Vec<Finding>, Vec<EntropyFinding>) {
+        let pattern_findings = self.scan(text, location);
+        let entropy_findings = self.entropy_scanner.scan(text, location);
+        (pattern_findings, entropy_findings)
     }
 
     /// Scan and return only high and critical severity findings

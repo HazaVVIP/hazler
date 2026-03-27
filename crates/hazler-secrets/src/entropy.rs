@@ -73,16 +73,19 @@ pub fn calculate_entropy(s: &str) -> f64 {
         return 0.0;
     }
 
+    // Single pass: build frequency map and count characters simultaneously.
     let mut freq: HashMap<char, usize> = HashMap::new();
+    let mut len: usize = 0;
     for c in s.chars() {
         *freq.entry(c).or_insert(0) += 1;
+        len += 1;
     }
 
-    let len = s.chars().count() as f64;
+    let len_f = len as f64;
     -freq
         .values()
         .map(|&count| {
-            let p = count as f64 / len;
+            let p = count as f64 / len_f;
             p * p.log2()
         })
         .sum::<f64>()
@@ -126,9 +129,8 @@ impl EntropyScanner {
     /// * `location` – The file path or URL being scanned (used in findings).
     pub fn scan(&self, text: &str, location: &str) -> Vec<EntropyFinding> {
         let mut findings = Vec::new();
-        let lines: Vec<&str> = text.lines().collect();
 
-        for (line_idx, line) in lines.iter().enumerate() {
+        for (line_idx, line) in text.lines().enumerate() {
             for token in self.extract_tokens(line) {
                 let entropy = calculate_entropy(token.value);
                 if entropy < self.threshold {
@@ -227,11 +229,26 @@ impl EntropyScanner {
         let entropy_score = ((entropy - self.threshold) / (6.0 - self.threshold)).clamp(0.0, 1.0);
         score += entropy_score * 60.0;
 
-        // Character-class diversity bonus
-        let has_upper = value.chars().any(|c| c.is_ascii_uppercase());
-        let has_lower = value.chars().any(|c| c.is_ascii_lowercase());
-        let has_digit = value.chars().any(|c| c.is_ascii_digit());
-        let has_special = value.chars().any(|c| matches!(c, '+' | '/' | '=' | '_' | '-'));
+        // Character-class diversity bonus – single pass over the value.
+        let mut has_upper = false;
+        let mut has_lower = false;
+        let mut has_digit = false;
+        let mut has_special = false;
+        for c in value.chars() {
+            if c.is_ascii_uppercase() {
+                has_upper = true;
+            } else if c.is_ascii_lowercase() {
+                has_lower = true;
+            } else if c.is_ascii_digit() {
+                has_digit = true;
+            } else if matches!(c, '+' | '/' | '=' | '_' | '-') {
+                has_special = true;
+            }
+            // Early exit once all four classes are confirmed.
+            if has_upper && has_lower && has_digit && has_special {
+                break;
+            }
+        }
 
         let class_count = [has_upper, has_lower, has_digit, has_special]
             .iter()
@@ -249,14 +266,43 @@ impl EntropyScanner {
     }
 
     /// Redact the middle of a token, keeping the first and last 4 characters.
+    ///
+    /// Uses a single forward pass with a ring buffer to locate both byte
+    /// boundaries simultaneously, avoiding any `Vec<char>` allocation.
     fn redact(value: &str) -> String {
-        let chars: Vec<char> = value.chars().collect();
-        if chars.len() <= 8 {
+        const KEEP: usize = 4;
+        const RING: usize = KEEP + 1; // ring buffer size
+
+        // Ring buffer storing the byte index of the most-recently-seen
+        // `RING` character starts.  After the loop, ring[(char_count - k) % RING]
+        // holds the byte index of the k-th character from the end (0-indexed from end).
+        let mut ring = [0usize; RING];
+        let mut char_count = 0usize;
+        let mut prefix_end = value.len(); // byte index just after the KEEP-th char
+
+        for (byte_idx, _ch) in value.char_indices() {
+            ring[char_count % RING] = byte_idx;
+            char_count += 1;
+            if char_count == KEEP + 1 {
+                // byte_idx is the start of the (KEEP+1)-th char, so the first
+                // KEEP chars end here.
+                prefix_end = byte_idx;
+            }
+        }
+
+        if char_count <= KEEP * 2 {
             return "***REDACTED***".to_string();
         }
-        let prefix: String = chars.iter().take(4).collect();
-        let suffix: String = chars.iter().skip(chars.len() - 4).copied().collect();
-        format!("{}...[REDACTED]...{}", prefix, suffix)
+
+        // The suffix starts at char index (char_count - KEEP) (0-indexed).
+        // That char's byte index is in the ring slot:
+        //   (char_count - KEEP) % RING
+        let suffix_start = ring[(char_count - KEEP) % RING];
+        format!(
+            "{}...[REDACTED]...{}",
+            &value[..prefix_end],
+            &value[suffix_start..]
+        )
     }
 }
 

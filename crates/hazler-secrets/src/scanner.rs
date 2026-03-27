@@ -77,9 +77,8 @@ impl SecretScanner {
     /// A vector of findings
     pub fn scan(&self, text: &str, location: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
-        let lines: Vec<&str> = text.lines().collect();
 
-        for (line_idx, line) in lines.iter().enumerate() {
+        for (line_idx, line) in text.lines().enumerate() {
             for (name, pattern, severity, description) in &self.patterns {
                 // Use captures_iter for global search to find all matches in minified code
                 for captures in pattern.captures_iter(line) {
@@ -111,7 +110,12 @@ impl SecretScanner {
         findings
     }
 
-    /// Redact sensitive information from matched text
+    /// Redact sensitive information from matched text.
+    ///
+    /// Both the high-sensitivity (keep 4) and standard (keep 6) paths use a
+    /// single forward pass with a ring buffer so that the byte boundaries for
+    /// the prefix and suffix are located without allocating a `Vec<char>` and
+    /// without iterating the string twice.
     fn redact_sensitive(text: &str, pattern_name: &str) -> String {
         // For high-sensitivity patterns, redact most of the value
         match pattern_name {
@@ -119,26 +123,43 @@ impl SecretScanner {
                 || name.contains("Private")
                 || name.contains("Password") =>
             {
-                let chars: Vec<char> = text.chars().collect();
-                if chars.len() > 8 {
-                    format!(
-                        "{}...{}",
-                        chars.iter().take(4).collect::<String>(),
-                        chars.iter().skip(chars.len() - 4).collect::<String>()
-                    )
+                // Keep first 4 and last 4 characters.
+                const KEEP: usize = 4;
+                const RING: usize = KEEP + 1;
+                let mut ring = [0usize; RING];
+                let mut char_count = 0usize;
+                let mut prefix_end = text.len();
+                for (byte_idx, _ch) in text.char_indices() {
+                    ring[char_count % RING] = byte_idx;
+                    char_count += 1;
+                    if char_count == KEEP + 1 {
+                        prefix_end = byte_idx;
+                    }
+                }
+                if char_count > KEEP * 2 {
+                    let suffix_start = ring[(char_count - KEEP) % RING];
+                    format!("{}...{}", &text[..prefix_end], &text[suffix_start..])
                 } else {
                     "***REDACTED***".to_string()
                 }
             }
             _ => {
-                // For other patterns, show a bit more
-                let chars: Vec<char> = text.chars().collect();
-                if chars.len() > 12 {
-                    format!(
-                        "{}...{}",
-                        chars.iter().take(6).collect::<String>(),
-                        chars.iter().skip(chars.len() - 6).collect::<String>()
-                    )
+                // For other patterns, show a bit more (keep first 6 and last 6).
+                const KEEP: usize = 6;
+                const RING: usize = KEEP + 1;
+                let mut ring = [0usize; RING];
+                let mut char_count = 0usize;
+                let mut prefix_end = text.len();
+                for (byte_idx, _ch) in text.char_indices() {
+                    ring[char_count % RING] = byte_idx;
+                    char_count += 1;
+                    if char_count == KEEP + 1 {
+                        prefix_end = byte_idx;
+                    }
+                }
+                if char_count > KEEP * 2 {
+                    let suffix_start = ring[(char_count - KEEP) % RING];
+                    format!("{}...{}", &text[..prefix_end], &text[suffix_start..])
                 } else {
                     text.to_string()
                 }

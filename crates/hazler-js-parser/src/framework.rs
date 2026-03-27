@@ -140,6 +140,23 @@ pub static FRAMEWORK_ENDPOINT_PATTERNS: Lazy<Vec<(Framework, Vec<&'static str>)>
         ]
     });
 
+/// Pre-compiled framework-specific endpoint regexes.
+///
+/// Compiled once at program startup so that `extract_framework_endpoints`
+/// does not recompile the same patterns on every call.
+pub static FRAMEWORK_ENDPOINT_REGEXES: Lazy<Vec<(Framework, Vec<Regex>)>> = Lazy::new(|| {
+    FRAMEWORK_ENDPOINT_PATTERNS
+        .iter()
+        .map(|(fw, patterns)| {
+            let compiled = patterns
+                .iter()
+                .filter_map(|p| Regex::new(p).ok())
+                .collect();
+            (fw.clone(), compiled)
+        })
+        .collect()
+});
+
 /// Detect framework from JavaScript content
 pub fn detect_framework(js_content: &str) -> Vec<Framework> {
     let mut detected = Vec::new();
@@ -158,6 +175,19 @@ pub fn detect_framework(js_content: &str) -> Vec<Framework> {
     }
 
     detected
+}
+
+/// Get framework-specific endpoint patterns as pre-compiled [`Regex`] references.
+///
+/// Using pre-compiled regexes avoids re-compiling the same patterns on every
+/// call to `extract_framework_endpoints`, which is a significant performance
+/// improvement when processing large JavaScript files.
+pub fn get_compiled_framework_patterns(framework: &Framework) -> Vec<&'static Regex> {
+    FRAMEWORK_ENDPOINT_REGEXES
+        .iter()
+        .filter(|(fw, _)| fw == framework)
+        .flat_map(|(_, patterns)| patterns.iter())
+        .collect()
 }
 
 /// Get framework-specific endpoint patterns

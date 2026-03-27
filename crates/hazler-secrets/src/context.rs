@@ -62,8 +62,15 @@ pub fn is_likely_placeholder(value: &str) -> bool {
         || lower == "replace_me"
         || lower.starts_with("xxx")
         || lower.ends_with("xxx")
-        // Repeating characters (e.g. "aaaaaaaaaa") are unlikely to be real secrets
-        || (value.len() > 4 && value.chars().all(|c| c == value.chars().next().unwrap()))
+        // Repeating characters (e.g. "aaaaaaaaaa") are unlikely to be real secrets.
+        // Obtain the first character once and compare the rest against it in a
+        // single pass instead of calling `value.chars().next()` inside the closure.
+        || (value.len() > 4 && {
+            let mut chars = value.chars();
+            chars
+                .next()
+                .map_or(false, |first| chars.all(|c| c == first))
+        })
 }
 
 #[cfg(test)]

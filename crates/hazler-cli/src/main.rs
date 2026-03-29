@@ -555,6 +555,8 @@ fn run_wizard() -> Args {
     let mut pages_input = String::new();
     let mut secrets_input = String::new();
     let mut format_input = String::new();
+    let mut html_input = String::new();
+    let mut html_path_input = String::new();
 
     // Get target URL
     print!(
@@ -624,6 +626,37 @@ fn run_wizard() -> Args {
         _ => (FORMAT_URLS.to_string(), false),
     };
 
+    // Ask about HTML report export
+    print!(
+        "{} ",
+        "Generate HTML report? (y/n, default y):".bright_white()
+    );
+    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdin()
+        .read_line(&mut html_input)
+        .expect("Failed to read user input");
+    let want_html = html_input.trim().to_lowercase() != "n";
+
+    let export = if want_html {
+        print!(
+            "{} ",
+            "HTML report output file (default: hazler.html):".bright_white()
+        );
+        io::stdout().flush().expect("Failed to flush stdout");
+        io::stdin()
+            .read_line(&mut html_path_input)
+            .expect("Failed to read user input");
+        let html_path = html_path_input.trim();
+        let html_path = if html_path.is_empty() {
+            "hazler.html".to_string()
+        } else {
+            html_path.to_string()
+        };
+        vec![format!("html:{}", html_path)]
+    } else {
+        Vec::new()
+    };
+
     println!("\n{}", "Configuration Summary:".green().bold());
     println!("  URL: {}", url.cyan());
     println!("  Max Depth: {}", max_depth);
@@ -640,6 +673,9 @@ fn run_wizard() -> Args {
         if no_secrets { "disabled" } else { "enabled" }
     );
     println!("  Output Format: {}", output_format);
+    if !export.is_empty() {
+        println!("  HTML Report: {}", export[0].trim_start_matches("html:").cyan());
+    }
     println!();
 
     Args {
@@ -652,7 +688,7 @@ fn run_wizard() -> Args {
         output_format,
         include_body: false,
         fields: None,
-        export: Vec::new(),
+        export,
         webhook: None,
         webhook_type: None,
         verbose: false,

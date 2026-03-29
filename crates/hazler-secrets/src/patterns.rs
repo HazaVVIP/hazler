@@ -222,45 +222,12 @@ pub static SECRET_PATTERNS: Lazy<Vec<SecretPattern>> = Lazy::new(|| {
             severity: "medium",
             description: "Internal IP address found",
         },
+        // Credentials in Config Files (only when inline credentials are present, not just a file reference)
         SecretPattern {
-            name: "Email Address",
-            pattern: r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
-            severity: "low",
-            description: "Email address found (potential contact information)",
-        },
-        // Config Files
-        SecretPattern {
-            name: "Environment File Reference",
-            pattern: r"\.env(?:\.[a-z]+)?(?:['\x22]|\b)",
-            severity: "medium",
-            description: "Reference to .env file found",
-        },
-        SecretPattern {
-            name: "Config File Reference",
-            pattern: r"(?:config|secrets|credentials)\.(?:json|ya?ml|ini|conf)\b",
-            severity: "medium",
-            description: "Reference to configuration file found",
-        },
-        // Git
-        SecretPattern {
-            name: "Git Directory Reference",
-            pattern: r"\.git/",
-            severity: "medium",
-            description: "Reference to .git directory found",
-        },
-        // Backup Files
-        SecretPattern {
-            name: "Backup File Reference",
-            pattern: r"\.(bak|backup|old|orig|save|swp|tmp)\b",
-            severity: "low",
-            description: "Reference to backup file found",
-        },
-        // Source Maps
-        SecretPattern {
-            name: "Source Map Reference",
-            pattern: r"\.js\.map\b",
-            severity: "low",
-            description: "JavaScript source map reference found",
+            name: "Environment Variable with Secret",
+            pattern: r"(?:^|['\x22;\s])((?i:SECRET|PASSWORD|API[_-]?KEY|TOKEN|AUTH)[A-Za-z0-9_]*)=['\x22]?([A-Za-z0-9+/=_\-]{16,})['\x22]?",
+            severity: "high",
+            description: "Potential secret in environment variable assignment found",
         },
     ]
 });

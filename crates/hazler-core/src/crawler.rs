@@ -327,6 +327,45 @@ impl Crawler {
         Self::crawl_page_with_http(url, depth, context).await
     }
 
+    /// Detect whether a 200 OK response body indicates a soft-forbidden or
+    /// soft-not-found page (e.g. a custom error page that returns HTTP 200).
+    ///
+    /// Only the first 4 KB of the body is inspected so that the check is cheap
+    /// even for large responses.
+    fn is_soft_forbidden_body(body: &str) -> bool {
+        // Examine only the beginning of the document – real error pages put the
+        // message near the top, while legitimate pages with accidental matches
+        // (e.g. help docs that describe permission errors) tend to be much longer
+        // and contain the keyword deep in the body.
+        //
+        // Find a safe UTF-8 boundary at or before 4096 bytes so we never split
+        // a multi-byte character.
+        let limit = body
+            .char_indices()
+            .map(|(i, _)| i)
+            .take_while(|&i| i < 4096)
+            .last()
+            .map(|i| {
+                // Advance past the last character that starts before the limit.
+                body[i..].chars().next().map(|c| i + c.len_utf8()).unwrap_or(i)
+            })
+            .unwrap_or(body.len().min(4096));
+        let lower = body[..limit].to_lowercase();
+
+        // Common soft-403 / soft-404 indicators
+        lower.contains("403 forbidden")
+            || lower.contains("access denied")
+            || lower.contains("access is denied")
+            || lower.contains("you don't have permission")
+            || lower.contains("you do not have permission")
+            || lower.contains("permission denied")
+            || lower.contains("not authorized")
+            || lower.contains("unauthorized access")
+            || lower.contains("404 not found")
+            || lower.contains("page not found")
+            || lower.contains("resource not found")
+    }
+
     /// Determine if we should use browser for this URL
     /// Browser is useful for HTML pages but not for API endpoints or static files
     #[cfg(feature = "browser")]
@@ -630,30 +669,46 @@ impl Crawler {
         page.content_type = response.content_type;
         page.links = links.clone();
 
-        // Scan for secrets if enabled
+        // Scan for secrets if enabled, but only for successful responses.
+        // Skip scanning on 4xx/5xx error pages (404 Not Found, 403 Forbidden, etc.)
+        // and responses that indicate soft-forbidden / soft-404 content, as these
+        // pages rarely contain real secrets and generate excessive false positives.
         if let Some(ref scanner) = context.secret_scanner {
-            let findings = scanner.scan(&response.body, url.as_str());
-            if !findings.is_empty() {
-                info!("Found {} secret(s) at {}", findings.len(), url);
-                // Convert hazler_secrets::Finding to our Finding type
-                page.secrets = findings
-                    .into_iter()
-                    .map(|f| Finding {
-                        secret_type: f.secret_type,
-                        severity: match f.severity {
-                            hazler_secrets::Severity::Critical => Severity::Critical,
-                            hazler_secrets::Severity::High => Severity::High,
-                            hazler_secrets::Severity::Medium => Severity::Medium,
-                            hazler_secrets::Severity::Low => Severity::Low,
-                        },
-                        description: f.description,
-                        line: f.line,
-                        column: f.column,
-                        context: f.context,
-                        matched_text: f.matched_text,
-                        location: f.location,
-                    })
-                    .collect();
+            let is_error_response = response.status_code >= 400;
+            let is_soft_forbidden = response.status_code == 200
+                && Self::is_soft_forbidden_body(&response.body);
+
+            if !is_error_response && !is_soft_forbidden {
+                let findings = scanner.scan(&response.body, url.as_str());
+                if !findings.is_empty() {
+                    info!("Found {} secret(s) at {}", findings.len(), url);
+                    // Convert hazler_secrets::Finding to our Finding type
+                    page.secrets = findings
+                        .into_iter()
+                        .map(|f| Finding {
+                            secret_type: f.secret_type,
+                            severity: match f.severity {
+                                hazler_secrets::Severity::Critical => Severity::Critical,
+                                hazler_secrets::Severity::High => Severity::High,
+                                hazler_secrets::Severity::Medium => Severity::Medium,
+                                hazler_secrets::Severity::Low => Severity::Low,
+                            },
+                            description: f.description,
+                            line: f.line,
+                            column: f.column,
+                            context: f.context,
+                            matched_text: f.matched_text,
+                            location: f.location,
+                        })
+                        .collect();
+                }
+            } else if is_error_response {
+                debug!(
+                    "Skipping secret scan for {} (HTTP {})",
+                    url, response.status_code
+                );
+            } else {
+                debug!("Skipping secret scan for {} (soft-forbidden body detected)", url);
             }
         }
 

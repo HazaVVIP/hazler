@@ -69,7 +69,7 @@ pub fn is_likely_placeholder(value: &str) -> bool {
             let mut chars = value.chars();
             chars
                 .next()
-                .map_or(false, |first| chars.all(|c| c == first))
+                .is_some_and(|first| chars.all(|c| c == first))
         })
 }
 

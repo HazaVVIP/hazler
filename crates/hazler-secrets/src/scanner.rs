@@ -77,6 +77,8 @@ impl SecretScanner {
     /// A vector of findings
     pub fn scan(&self, text: &str, location: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
+        // Track (line, column) positions already reported to avoid duplicates
+        let mut seen_positions = std::collections::HashSet::new();
 
         for (line_idx, line) in text.lines().enumerate() {
             for (name, pattern, severity, description) in &self.patterns {
@@ -84,6 +86,13 @@ impl SecretScanner {
                 for captures in pattern.captures_iter(line) {
                     let matched = captures.get(0).unwrap();
                     let matched_text = matched.as_str();
+
+                    // Deduplicate: skip if another pattern already reported a finding
+                    // at exactly the same position in the same file
+                    let pos_key = (line_idx, matched.start());
+                    if !seen_positions.insert(pos_key) {
+                        continue;
+                    }
 
                     // Get context (up to 50 chars before and after)
                     let start = matched.start().saturating_sub(50);
@@ -292,14 +301,14 @@ mod tests {
         let scanner = SecretScanner::new();
         let code = r#"
             const AWS_KEY = 'AKIA1234567890ABCDEF';
-            const email = 'user@example.com';
+            const SERVER_ADDR = '192.168.1.100';
         "#;
         let all_findings = scanner.scan(code, "test.js");
         let high_findings = scanner.scan_high_severity(code, "test.js");
 
-        // Should have both findings in all_findings
+        // Should have at least two findings (AWS key + internal IP)
         assert!(all_findings.len() >= 2);
-        // high_findings should only have AWS key (critical/high)
+        // high_findings should only have AWS key (critical/high), not internal IP (medium)
         assert!(high_findings.len() < all_findings.len());
     }
 

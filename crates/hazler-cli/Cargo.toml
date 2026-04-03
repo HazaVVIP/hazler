@@ -31,3 +31,6 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 elasticsearch = "8.5.0-alpha.1"
 reqwest = { workspace = true }
 uuid = { version = "1.6", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3.8"

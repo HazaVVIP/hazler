@@ -71,6 +71,9 @@ pub struct PageLoadResult {
 
     /// All intercepted network requests (including API calls)
     pub network_requests: Vec<NetworkRequest>,
+
+    /// Fully rendered HTML of the page after JavaScript execution
+    pub rendered_html: Option<String>,
 }
 
 /// Represents a captured network request from browser

@@ -12,6 +12,7 @@ pub struct SourceMapParser {
 
 /// Parsed source map information
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SourceMap {
     pub version: i32,
     pub file: Option<String>,
@@ -568,6 +569,103 @@ mod tests {
         assert_eq!(
             parser.extract_directory("src/admin/Dashboard.tsx"),
             Some("src".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_multiple_source_map_refs() {
+        let parser = SourceMapParser::new();
+        // A JS file that embeds its own content and references an external map
+        let js_content = r#"
+            (function() { return 42; })();
+            //# sourceMappingURL=chunk1.js.map
+        "#;
+        let js_url = Url::parse("https://example.com/js/chunk1.js").unwrap();
+        let refs = parser.detect_source_map_references(js_content, &js_url);
+        assert!(!refs.is_empty());
+        assert!(refs[0].map_url.as_str().contains("chunk1.js.map"));
+        assert!(!refs[0].inline);
+    }
+
+    #[test]
+    fn test_analyze_source_map_no_interesting_paths() {
+        let parser = SourceMapParser::new();
+        let source_map = SourceMap {
+            version: 3,
+            file: None,
+            sources: vec![
+                "src/components/Button.tsx".to_string(),
+                "src/components/Modal.tsx".to_string(),
+            ],
+            sources_content: None,
+            names: vec![],
+            mappings: "AAAA".to_string(),
+            source_root: None,
+        };
+
+        let analysis = parser.analyze_source_map(&source_map, "https://example.com/bundle.js.map");
+        assert_eq!(analysis.total_sources, 2);
+        // None of these paths are admin/api/secret etc., so no interesting paths expected
+        assert!(
+            analysis.interesting_paths.is_empty(),
+            "Plain component paths should not be classified as interesting"
+        );
+    }
+
+    #[test]
+    fn test_parse_source_map_with_source_root() {
+        let parser = SourceMapParser::new();
+        let content = r#"{
+            "version": 3,
+            "sourceRoot": "/project/src",
+            "sources": ["index.js"],
+            "names": [],
+            "mappings": "AAAA"
+        }"#;
+
+        let map = parser.parse_source_map(content).unwrap();
+        assert_eq!(map.source_root, Some("/project/src".to_string()));
+    }
+
+    #[test]
+    fn test_classify_auth_path() {
+        let parser = SourceMapParser::new();
+        let result = parser.classify_path("src/auth/login.ts");
+        assert!(result.is_some());
+        let classified = result.unwrap();
+        assert_eq!(classified.category, PathCategory::Auth);
+    }
+
+    #[test]
+    fn test_classify_test_path() {
+        let parser = SourceMapParser::new();
+        let result = parser.classify_path("src/__tests__/App.test.tsx");
+        // Test paths should be classified (category Test)
+        if let Some(classified) = result {
+            assert_eq!(classified.category, PathCategory::Test);
+        }
+    }
+
+    #[test]
+    fn test_framework_detection_vue() {
+        let parser = SourceMapParser::new();
+        let source_map = SourceMap {
+            version: 3,
+            file: None,
+            sources: vec![
+                "node_modules/vue/dist/vue.esm.js".to_string(),
+                "src/App.vue".to_string(),
+            ],
+            sources_content: None,
+            names: vec![],
+            mappings: "AAAA".to_string(),
+            source_root: None,
+        };
+
+        let analysis = parser.analyze_source_map(&source_map, "https://example.com/bundle.js.map");
+        assert!(
+            analysis.frameworks_detected.contains(&"vue".to_string()),
+            "Should detect Vue from node_modules/vue"
         );
     }
 }

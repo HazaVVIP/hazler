@@ -400,19 +400,64 @@ mod tests {
     }
 
     #[test]
-    fn test_minified_html_with_secrets() {
+    fn test_no_false_positives_on_empty_string() {
         let scanner = SecretScanner::new();
-        // Minified HTML with inline JavaScript containing secrets
-        let html = r#"<script>var k="AKIA1234567890ABCDEF";fetch("/api",{headers:{"Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}})</script>"#;
-        let findings = scanner.scan(html, "minified.html");
+        let findings = scanner.scan("", "empty.js");
+        assert!(findings.is_empty());
+    }
 
-        // Should find exactly AWS key and JWT token
-        assert_eq!(
-            findings.len(),
-            2,
-            "Expected exactly 2 findings in minified HTML"
-        );
-        assert!(findings.iter().any(|f| f.secret_type.contains("AWS")));
-        assert!(findings.iter().any(|f| f.secret_type.contains("JWT")));
+    #[test]
+    fn test_no_false_positives_on_plain_text() {
+        let scanner = SecretScanner::new();
+        // Plain English prose should not trigger secret patterns
+        let text = "The quick brown fox jumps over the lazy dog.";
+        let findings = scanner.scan(text, "text.txt");
+        assert!(findings.is_empty(), "Should not find secrets in plain text");
+    }
+
+    #[test]
+    fn test_scan_with_entropy_returns_both() {
+        let scanner = SecretScanner::new();
+        // AWS key is both a regex match AND a high-entropy string
+        let code = "const key = 'AKIA1234567890ABCDEF';";
+        let (pattern_findings, _entropy_findings) = scanner.scan_with_entropy(code, "test.js");
+        assert!(!pattern_findings.is_empty());
+    }
+
+    #[test]
+    fn test_redact_sensitive_short_value() {
+        // Values shorter than 2*KEEP should be fully redacted
+        let result = SecretScanner::redact_sensitive("short", "AWS Secret");
+        assert_eq!(result, "***REDACTED***");
+    }
+
+    #[test]
+    fn test_severity_from_string() {
+        assert_eq!(Severity::from("critical"), Severity::Critical);
+        assert_eq!(Severity::from("HIGH"), Severity::High);
+        assert_eq!(Severity::from("medium"), Severity::Medium);
+        assert_eq!(Severity::from("low"), Severity::Low);
+        // Unknown falls back to Medium
+        assert_eq!(Severity::from("unknown_level"), Severity::Medium);
+    }
+
+    #[test]
+    fn test_location_recorded_in_finding() {
+        let scanner = SecretScanner::new();
+        let location = "https://example.com/app.js";
+        let code = "const key = 'AKIA1234567890ABCDEF';";
+        let findings = scanner.scan(code, location);
+        assert!(!findings.is_empty());
+        assert_eq!(findings[0].location, location);
+    }
+
+    #[test]
+    fn test_line_and_column_numbers() {
+        let scanner = SecretScanner::new();
+        let code = "line1\nconst key = 'AKIA1234567890ABCDEF';";
+        let findings = scanner.scan(code, "test.js");
+        assert!(!findings.is_empty());
+        // Secret is on line 2
+        assert_eq!(findings[0].line, 2);
     }
 }

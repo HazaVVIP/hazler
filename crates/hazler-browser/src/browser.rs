@@ -330,6 +330,9 @@ impl Browser {
         // Get captured network requests
         let captured_requests = network_requests.lock().await.clone();
 
+        // Get fully rendered HTML from the DOM
+        let rendered_html = self.get_rendered_html(&page).await.ok();
+
         info!(
             "Captured {} network requests (including {} API calls)",
             captured_requests.len(),
@@ -353,6 +356,7 @@ impl Browser {
             screenshot_data,
             cookies,
             network_requests: captured_requests,
+            rendered_html,
         })
     }
 
@@ -374,6 +378,22 @@ impl Browser {
 
         debug!("Extracted {} links from page", links.len());
         Ok(links)
+    }
+
+    /// Get the rendered HTML of the page after JavaScript execution
+    async fn get_rendered_html(&self, page: &Page) -> Result<String> {
+        let js_code = "document.documentElement.outerHTML";
+
+        let result = page.evaluate(js_code).await.map_err(|e| {
+            BrowserError::JsExecutionError(format!("Failed to get rendered HTML: {}", e))
+        })?;
+
+        let html: String = result.into_value().map_err(|e| {
+            BrowserError::JsExecutionError(format!("Failed to parse rendered HTML: {}", e))
+        })?;
+
+        debug!("Extracted rendered HTML ({} bytes)", html.len());
+        Ok(html)
     }
 
     /// Get the page title
@@ -492,5 +512,41 @@ mod tests {
 
         let parsed_url = Url::parse(error_url).unwrap();
         assert_eq!(parsed_url.scheme(), "chrome-error");
+    }
+
+    #[test]
+    fn test_page_load_result_has_rendered_html_field() {
+        // Verify that the PageLoadResult type includes the rendered_html field
+        use crate::types::PageLoadResult;
+        let result = PageLoadResult {
+            url: Url::parse("https://example.com").unwrap(),
+            status_code: 200,
+            links: vec![],
+            title: Some("Test Page".to_string()),
+            screenshot_data: None,
+            cookies: vec![],
+            network_requests: vec![],
+            rendered_html: Some("<html><body>Hello</body></html>".to_string()),
+        };
+        assert_eq!(
+            result.rendered_html,
+            Some("<html><body>Hello</body></html>".to_string())
+        );
+    }
+
+    #[test]
+    fn test_page_load_result_rendered_html_none() {
+        use crate::types::PageLoadResult;
+        let result = PageLoadResult {
+            url: Url::parse("https://example.com").unwrap(),
+            status_code: 200,
+            links: vec![],
+            title: None,
+            screenshot_data: None,
+            cookies: vec![],
+            network_requests: vec![],
+            rendered_html: None,
+        };
+        assert!(result.rendered_html.is_none());
     }
 }

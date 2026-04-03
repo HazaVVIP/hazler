@@ -275,7 +275,7 @@ impl StatePersistence {
 
     /// Load state from SQLite database
     fn load_sqlite(&self) -> anyhow::Result<CrawlState> {
-        use rusqlite::{Connection};
+        use rusqlite::Connection;
 
         let conn = Connection::open(&self.state_file)?;
 

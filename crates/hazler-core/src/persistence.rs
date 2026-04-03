@@ -246,8 +246,7 @@ impl StatePersistence {
         // Replace visited URLs
         conn.execute("DELETE FROM visited_urls", [])?;
         {
-            let mut stmt =
-                conn.prepare("INSERT OR IGNORE INTO visited_urls (url) VALUES (?1)")?;
+            let mut stmt = conn.prepare("INSERT OR IGNORE INTO visited_urls (url) VALUES (?1)")?;
             for url in &state.visited {
                 stmt.execute(params![url])?;
             }
@@ -256,9 +255,8 @@ impl StatePersistence {
         // Replace queued URLs
         conn.execute("DELETE FROM queued_urls", [])?;
         {
-            let mut stmt = conn.prepare(
-                "INSERT INTO queued_urls (url, depth, referrer) VALUES (?1, ?2, ?3)",
-            )?;
+            let mut stmt =
+                conn.prepare("INSERT INTO queued_urls (url, depth, referrer) VALUES (?1, ?2, ?3)")?;
             for queued in &state.queue {
                 stmt.execute(params![queued.url, queued.depth as i64, queued.referrer])?;
             }
@@ -292,8 +290,7 @@ impl StatePersistence {
         let start_urls: Vec<String> = serde_json::from_str(&get_meta("start_urls")?)?;
         let pages_crawled: usize = get_meta("pages_crawled")?.parse()?;
         let saved_at = get_meta("saved_at")?;
-        let config_snapshot: ConfigSnapshot =
-            serde_json::from_str(&get_meta("config_snapshot")?)?;
+        let config_snapshot: ConfigSnapshot = serde_json::from_str(&get_meta("config_snapshot")?)?;
 
         // Load visited URLs
         let mut visited = HashSet::new();
@@ -515,9 +512,18 @@ mod tests {
         assert_eq!(loaded_state.visited_count(), state.visited_count());
         assert_eq!(loaded_state.queue_count(), state.queue_count());
         assert_eq!(loaded_state.pages_crawled, state.pages_crawled);
-        assert_eq!(loaded_state.config_snapshot.max_depth, state.config_snapshot.max_depth);
-        assert_eq!(loaded_state.config_snapshot.user_agent, state.config_snapshot.user_agent);
-        assert_eq!(loaded_state.config_snapshot.stealth_mode, state.config_snapshot.stealth_mode);
+        assert_eq!(
+            loaded_state.config_snapshot.max_depth,
+            state.config_snapshot.max_depth
+        );
+        assert_eq!(
+            loaded_state.config_snapshot.user_agent,
+            state.config_snapshot.user_agent
+        );
+        assert_eq!(
+            loaded_state.config_snapshot.stealth_mode,
+            state.config_snapshot.stealth_mode
+        );
     }
 
     #[test]
@@ -593,5 +599,4 @@ mod tests {
         let loaded = persistence.load().unwrap();
         assert_eq!(loaded.visited_count(), 3);
     }
-
 }

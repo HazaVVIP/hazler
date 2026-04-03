@@ -779,7 +779,10 @@ fn build_secrets_section(
 
     for page in &result.pages {
         if !page.secrets.is_empty() {
-            html.push_str(&format!(r#"<h4>📄 {}</h4>"#, html_escape(page.url.as_ref())));
+            html.push_str(&format!(
+                r#"<h4>📄 {}</h4>"#,
+                html_escape(page.url.as_ref())
+            ));
 
             for finding in &page.secrets {
                 let severity_class = match finding.severity {

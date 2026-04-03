@@ -702,7 +702,10 @@ fn run_wizard() -> Args {
     );
     println!("  Output Format: {}", output_format);
     if !export.is_empty() {
-        println!("  HTML Report: {}", export[0].trim_start_matches("html:").cyan());
+        println!(
+            "  HTML Report: {}",
+            export[0].trim_start_matches("html:").cyan()
+        );
     }
     println!();
 
@@ -1053,9 +1056,7 @@ async fn main() {
                             result.errors.extend(fuzz_result.errors);
 
                             if let Some(ref findings) = fuzz_result.secret_findings {
-                                if let Some(ref mut combined_findings) =
-                                    result.secret_findings
-                                {
+                                if let Some(ref mut combined_findings) = result.secret_findings {
                                     combined_findings.total += findings.total;
                                     combined_findings.critical += findings.critical;
                                     combined_findings.high += findings.high;
@@ -1072,10 +1073,7 @@ async fn main() {
                     }
                 }
 
-                eprintln!(
-                    "{} Fuzz crawl complete",
-                    "✓".green().bold()
-                );
+                eprintln!("{} Fuzz crawl complete", "✓".green().bold());
             }
         }
     }

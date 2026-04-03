@@ -347,7 +347,11 @@ impl Crawler {
             .last()
             .map(|i| {
                 // Advance past the last character that starts before the limit.
-                body[i..].chars().next().map(|c| i + c.len_utf8()).unwrap_or(i)
+                body[i..]
+                    .chars()
+                    .next()
+                    .map(|c| i + c.len_utf8())
+                    .unwrap_or(i)
             })
             .unwrap_or(body.len().min(4096));
         let lower = body[..limit].to_lowercase();
@@ -704,8 +708,8 @@ impl Crawler {
         // pages rarely contain real secrets and generate excessive false positives.
         if let Some(ref scanner) = context.secret_scanner {
             let is_error_response = response.status_code >= 400;
-            let is_soft_forbidden = response.status_code == 200
-                && Self::is_soft_forbidden_body(&response.body);
+            let is_soft_forbidden =
+                response.status_code == 200 && Self::is_soft_forbidden_body(&response.body);
 
             if !is_error_response && !is_soft_forbidden {
                 let findings = scanner.scan(&response.body, url.as_str());
@@ -737,7 +741,10 @@ impl Crawler {
                     url, response.status_code
                 );
             } else {
-                debug!("Skipping secret scan for {} (soft-forbidden body detected)", url);
+                debug!(
+                    "Skipping secret scan for {} (soft-forbidden body detected)",
+                    url
+                );
             }
         }
 

@@ -187,8 +187,8 @@ impl EntropyScanner {
         let mut start: Option<usize> = None;
 
         for (i, &b) in bytes.iter().enumerate() {
-            let in_token = b.is_ascii_alphanumeric()
-                || matches!(b, b'+' | b'/' | b'=' | b'_' | b'-');
+            let in_token =
+                b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=' | b'_' | b'-');
 
             match (start, in_token) {
                 (None, true) => start = Some(i),
@@ -424,8 +424,7 @@ mod tests {
     fn test_scanner_severity_high_for_very_high_entropy() {
         let scanner = EntropyScanner::new();
         // Base64-like string with all character classes → very high entropy
-        let code =
-            r#"const token = "aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789+/abcDEFG";"#;
+        let code = r#"const token = "aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789+/abcDEFG";"#;
         let findings = scanner.scan(code, "test.js");
         assert!(!findings.is_empty());
         // High-entropy findings with diverse character classes should be High

@@ -148,10 +148,7 @@ pub static FRAMEWORK_ENDPOINT_REGEXES: Lazy<Vec<(Framework, Vec<Regex>)>> = Lazy
     FRAMEWORK_ENDPOINT_PATTERNS
         .iter()
         .map(|(fw, patterns)| {
-            let compiled = patterns
-                .iter()
-                .filter_map(|p| Regex::new(p).ok())
-                .collect();
+            let compiled = patterns.iter().filter_map(|p| Regex::new(p).ok()).collect();
             (fw.clone(), compiled)
         })
         .collect()

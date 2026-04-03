@@ -382,6 +382,24 @@ fn build_html_report(result: &CrawlResult) -> String {
             background: #2980b9;
         }}
 
+        .sec-filter-btn {{
+            padding: 6px 14px;
+            border: 1px solid #3498db;
+            border-radius: 4px;
+            cursor: pointer;
+            background: white;
+            color: #3498db;
+            margin: 3px;
+            font-size: 0.85em;
+            transition: all 0.2s;
+        }}
+
+        .sec-filter-btn:hover,
+        .sec-filter-btn.active-filter {{
+            background: #3498db;
+            color: white;
+        }}
+
         table.sortable th {{
             cursor: pointer;
             user-select: none;
@@ -646,6 +664,35 @@ fn build_html_report(result: &CrawlResult) -> String {
         document.getElementById('statusFilter').value = '';
         filterTable();
     }}
+
+    // Endpoint search filter
+    function filterEndpoints() {{
+        const query = document.getElementById('endpointSearch').value.toLowerCase();
+        const items = document.querySelectorAll('#endpointList li[data-url]');
+        items.forEach(item => {{
+            const url = (item.getAttribute('data-url') || '').toLowerCase();
+            item.style.display = (!query || url.includes(query)) ? '' : 'none';
+        }});
+    }}
+
+    // Secrets severity filter
+    function filterSecrets(severity) {{
+        // Update button active state
+        document.querySelectorAll('.sec-filter-btn').forEach(btn => {{
+            btn.classList.remove('active-filter');
+        }});
+        const activeBtn = document.getElementById('secBtn-' + severity);
+        if (activeBtn) activeBtn.classList.add('active-filter');
+
+        // Show/hide secret cards
+        document.querySelectorAll('.secret-card').forEach(card => {{
+            if (severity === 'all' || card.getAttribute('data-severity') === severity) {{
+                card.style.display = '';
+            }} else {{
+                card.style.display = 'none';
+            }}
+        }});
+    }}
     </script>
 </body>
 </html>"#,
@@ -717,11 +764,25 @@ fn build_secrets_section(
     );
 
     // Add detailed findings
+    html.push_str(r#"
+        <div class="filter-controls">
+            <strong>Filter by severity:</strong>
+            <button onclick="filterSecrets('all')" id="secBtn-all" class="sec-filter-btn active-filter">All</button>
+            <button onclick="filterSecrets('critical')" id="secBtn-critical" class="sec-filter-btn">Critical</button>
+            <button onclick="filterSecrets('high')" id="secBtn-high" class="sec-filter-btn">High</button>
+            <button onclick="filterSecrets('medium')" id="secBtn-medium" class="sec-filter-btn">Medium</button>
+            <button onclick="filterSecrets('low')" id="secBtn-low" class="sec-filter-btn">Low</button>
+        </div>
+        <div id="secretsContainer">
+    "#);
     html.push_str("<h3>Detailed Findings</h3>");
 
     for page in &result.pages {
         if !page.secrets.is_empty() {
-            html.push_str(&format!(r#"<h4>📄 {}</h4>"#, page.url));
+            html.push_str(&format!(
+                r#"<h4>📄 {}</h4>"#,
+                html_escape(page.url.as_ref())
+            ));
 
             for finding in &page.secrets {
                 let severity_class = match finding.severity {
@@ -740,7 +801,7 @@ fn build_secrets_section(
 
                 html.push_str(&format!(
                     r#"
-                    <div class="secret-card {}">
+                    <div class="secret-card {}" data-severity="{}">
                         <p><strong>{}</strong> <span class="severity-{}">{}</span></p>
                         <p>{}</p>
                         <p><strong>Location:</strong> Line {}, Column {}</p>
@@ -748,10 +809,11 @@ fn build_secrets_section(
                     </div>
                     "#,
                     severity_class,
-                    finding.secret_type,
+                    severity_class,
+                    html_escape(&finding.secret_type),
                     severity_class,
                     severity_label,
-                    finding.description,
+                    html_escape(&finding.description),
                     finding.line,
                     finding.column,
                     html_escape(&finding.context)
@@ -759,6 +821,8 @@ fn build_secrets_section(
             }
         }
     }
+
+    html.push_str("</div>"); // close secretsContainer
 
     html
 }
@@ -824,7 +888,7 @@ fn build_pages_section(result: &CrawlResult) -> String {
     html
 }
 
-/// Build the discovered endpoints section
+/// Build the discovered endpoints section with search filter
 fn build_endpoints_section(result: &CrawlResult) -> String {
     let mut all_links: Vec<String> = result
         .pages
@@ -840,7 +904,14 @@ fn build_endpoints_section(result: &CrawlResult) -> String {
         r#"
         <h2>🔗 Discovered Endpoints</h2>
         <p>Total unique endpoints: <strong>{}</strong></p>
-        <ul class="endpoint-list">
+        <div class="filter-controls">
+            <input type="text" id="endpointSearch" placeholder="Search endpoints..."
+                oninput="filterEndpoints()" style="width:60%;">
+            <button onclick="document.getElementById('endpointSearch').value=''; filterEndpoints();">
+                Reset
+            </button>
+        </div>
+        <ul class="endpoint-list" id="endpointList">
         "#,
         all_links.len()
     );
@@ -848,7 +919,8 @@ fn build_endpoints_section(result: &CrawlResult) -> String {
     for (i, link) in all_links.iter().enumerate() {
         if i < MAX_DISPLAYED_ENDPOINTS {
             html.push_str(&format!(
-                r#"<li class="endpoint-item">{}</li>"#,
+                r#"<li class="endpoint-item" data-url="{}">{}</li>"#,
+                html_escape(link),
                 html_escape(link)
             ));
         }
@@ -856,8 +928,9 @@ fn build_endpoints_section(result: &CrawlResult) -> String {
 
     if all_links.len() > MAX_DISPLAYED_ENDPOINTS {
         html.push_str(&format!(
-            r#"<li class="endpoint-item"><em>... and {} more endpoints</em></li>"#,
-            all_links.len() - MAX_DISPLAYED_ENDPOINTS
+            r#"<li class="endpoint-item" id="endpointOverflow"><em>... and {} more endpoints (shown up to {})</em></li>"#,
+            all_links.len() - MAX_DISPLAYED_ENDPOINTS,
+            MAX_DISPLAYED_ENDPOINTS
         ));
     }
 

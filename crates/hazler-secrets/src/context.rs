@@ -22,7 +22,12 @@ pub fn extract_context_lines<'a>(
 ///
 /// Returns up to `window` characters before and after the match,
 /// trimming to line boundaries.
-pub fn extract_inline_context(line: &str, match_start: usize, match_end: usize, window: usize) -> String {
+pub fn extract_inline_context(
+    line: &str,
+    match_start: usize,
+    match_end: usize,
+    window: usize,
+) -> String {
     let ctx_start = match_start.saturating_sub(window);
     let ctx_end = (match_end + window).min(line.len());
     line[ctx_start..ctx_end].to_string()
@@ -101,7 +106,9 @@ mod tests {
     fn test_is_likely_test_context() {
         assert!(is_likely_test_context("const testApiKey = 'abc123';"));
         assert!(is_likely_test_context("# example usage"));
-        assert!(!is_likely_test_context("const apiKey = 'Xk7mP9qR8vB2nL4s';"));
+        assert!(!is_likely_test_context(
+            "const apiKey = 'Xk7mP9qR8vB2nL4s';"
+        ));
     }
 
     #[test]

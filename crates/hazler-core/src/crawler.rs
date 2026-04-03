@@ -347,7 +347,11 @@ impl Crawler {
             .last()
             .map(|i| {
                 // Advance past the last character that starts before the limit.
-                body[i..].chars().next().map(|c| i + c.len_utf8()).unwrap_or(i)
+                body[i..]
+                    .chars()
+                    .next()
+                    .map(|c| i + c.len_utf8())
+                    .unwrap_or(i)
             })
             .unwrap_or(body.len().min(4096));
         let lower = body[..limit].to_lowercase();
@@ -469,14 +473,43 @@ impl Crawler {
             seen.insert(canonical)
         });
 
-        // Create page object with empty body
-        // TODO: Extract rendered HTML from browser for body content
-        let mut page = Page::new(result.url.clone(), result.status_code, String::new(), depth);
+        // Create page object using fully rendered HTML body from the browser
+        let body = result.rendered_html.unwrap_or_default();
+        let mut page = Page::new(result.url.clone(), result.status_code, body.clone(), depth);
         page.links = links.clone();
         page.content_type = Some("text/html".to_string());
 
-        // Note: Secret scanning is skipped in browser mode due to empty body
-        // Future enhancement: Scan network request payloads for secrets
+        // Run secret scanning on rendered HTML body if scanner is configured
+        if let Some(ref scanner) = context.secret_scanner {
+            if !body.is_empty() {
+                let findings = scanner.scan(&body, result.url.as_str());
+                if !findings.is_empty() {
+                    info!(
+                        "Found {} secret(s) in browser-rendered page at {}",
+                        findings.len(),
+                        result.url
+                    );
+                }
+                page.secrets = findings
+                    .into_iter()
+                    .map(|f| crate::types::Finding {
+                        secret_type: f.secret_type,
+                        severity: match f.severity {
+                            hazler_secrets::Severity::Critical => Severity::Critical,
+                            hazler_secrets::Severity::High => Severity::High,
+                            hazler_secrets::Severity::Medium => Severity::Medium,
+                            hazler_secrets::Severity::Low => Severity::Low,
+                        },
+                        description: f.description,
+                        line: f.line,
+                        column: f.column,
+                        context: f.context,
+                        matched_text: f.matched_text,
+                        location: f.location,
+                    })
+                    .collect();
+            }
+        }
 
         // Filter links by scope and depth
         let new_urls: Vec<(Url, usize)> = links
@@ -675,8 +708,8 @@ impl Crawler {
         // pages rarely contain real secrets and generate excessive false positives.
         if let Some(ref scanner) = context.secret_scanner {
             let is_error_response = response.status_code >= 400;
-            let is_soft_forbidden = response.status_code == 200
-                && Self::is_soft_forbidden_body(&response.body);
+            let is_soft_forbidden =
+                response.status_code == 200 && Self::is_soft_forbidden_body(&response.body);
 
             if !is_error_response && !is_soft_forbidden {
                 let findings = scanner.scan(&response.body, url.as_str());
@@ -708,7 +741,10 @@ impl Crawler {
                     url, response.status_code
                 );
             } else {
-                debug!("Skipping secret scan for {} (soft-forbidden body detected)", url);
+                debug!(
+                    "Skipping secret scan for {} (soft-forbidden body detected)",
+                    url
+                );
             }
         }
 

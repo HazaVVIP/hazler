@@ -26,7 +26,7 @@ mod export_formats;
 use export_formats::{format_openapi, format_postman};
 
 mod fuzzer_integration;
-use fuzzer_integration::apply_fuzzing;
+use fuzzer_integration::{apply_fuzzing, write_fuzz_output};
 
 #[derive(Parser, Debug)]
 #[command(name = "hazler")]
@@ -216,6 +216,28 @@ struct Args {
     #[arg(long, default_value = "default")]
     fuzz_level: String,
 
+    /// Crawl fuzzed URLs after generating them (requires --fuzz)
+    /// When enabled, each fuzzed URL is fetched and results are merged
+    /// into the main crawl output
+    #[arg(long)]
+    fuzz_crawl: bool,
+
+    /// Write fuzzed URLs to a file instead of (or in addition to) crawling them
+    /// One URL per line. Useful for piping into other tools
+    /// Example: --fuzz-output fuzzed.txt
+    #[arg(long, value_name = "FILE")]
+    fuzz_output: Option<String>,
+
+    /// Disable colors and emoji in terminal output
+    /// Also respected via the NO_COLOR environment variable
+    #[arg(long)]
+    no_color: bool,
+
+    /// Use plain text output (no colors, no emoji, no ANSI codes)
+    /// Equivalent to --no-color; useful for log files and CI pipelines
+    #[arg(long)]
+    plain: bool,
+
     /// Save responses as baseline for future comparison
     /// Saves normalized response hashes to a JSON file for later comparison
     /// Example: --baseline baseline.json
@@ -248,6 +270,12 @@ struct Args {
     /// Example: --resume hazler-state.json
     #[arg(long, value_name = "FILE")]
     resume: Option<String>,
+
+    /// Use SQLite backend for state persistence instead of JSON
+    /// When combined with --resume, loads/saves state from an SQLite database
+    /// Example: --persist-sqlite --resume hazler-state.db
+    #[arg(long)]
+    persist_sqlite: bool,
 
     /// Auto-save state every N seconds (0 to disable)
     /// Periodically saves crawl state for recovery
@@ -674,7 +702,10 @@ fn run_wizard() -> Args {
     );
     println!("  Output Format: {}", output_format);
     if !export.is_empty() {
-        println!("  HTML Report: {}", export[0].trim_start_matches("html:").cyan());
+        println!(
+            "  HTML Report: {}",
+            export[0].trim_start_matches("html:").cyan()
+        );
     }
     println!();
 
@@ -707,11 +738,16 @@ fn run_wizard() -> Args {
         no_source_maps: false,
         fuzz: false,
         fuzz_level: "off".to_string(),
+        fuzz_crawl: false,
+        fuzz_output: None,
+        no_color: false,
+        plain: false,
         baseline: None,
         compare: None,
         diff_threshold: 0.85,
         cluster: "off".to_string(),
         resume: None,
+        persist_sqlite: false,
         auto_save: 60,
         max_retries: 3,
         circuit_breaker: false,
@@ -737,6 +773,11 @@ async fn main() {
     } else {
         Level::INFO
     };
+
+    // Disable colors if --no-color / --plain is set or if NO_COLOR env var is present
+    if args.no_color || args.plain || std::env::var("NO_COLOR").is_ok() {
+        colored::control::set_override(false);
+    }
     tracing_subscriber::fmt()
         .with_max_level(log_level)
         .with_target(false)
@@ -964,7 +1005,7 @@ async fn main() {
     }
 
     // Process the combined results
-    let result = combined_result;
+    let mut result = combined_result;
 
     // Apply fuzzing if enabled
     if args.fuzz && args.fuzz_level != "off" {
@@ -979,11 +1020,61 @@ async fn main() {
         // Apply fuzzing
         let fuzzed_urls = apply_fuzzing(&discovered_urls, args.fuzz, &args.fuzz_level);
 
-        // Note: In a real implementation, you would crawl these fuzzed URLs
-        // For now, we just report them
         if !fuzzed_urls.is_empty() {
             info!("Generated {} fuzzed URLs for testing", fuzzed_urls.len());
-            // TODO: Optionally crawl fuzzed URLs or output them separately
+
+            // Write fuzzed URLs to file if requested
+            if let Some(ref fuzz_output_path) = args.fuzz_output {
+                match write_fuzz_output(&fuzzed_urls, fuzz_output_path) {
+                    Ok(_) => {
+                        eprintln!(
+                            "{} Fuzzed URLs written to: {}",
+                            "✓".green().bold(),
+                            fuzz_output_path.bright_cyan()
+                        );
+                    }
+                    Err(e) => {
+                        error!("Failed to write fuzzed URLs to {}: {}", fuzz_output_path, e);
+                    }
+                }
+            }
+
+            // Crawl fuzzed URLs if --fuzz-crawl is enabled
+            if args.fuzz_crawl {
+                eprintln!(
+                    "{} Crawling {} fuzzed URLs...",
+                    "→".bright_blue(),
+                    fuzzed_urls.len().to_string().bright_green()
+                );
+
+                for fuzz_url in &fuzzed_urls {
+                    match crawler.crawl(fuzz_url.clone()).await {
+                        Ok(fuzz_result) => {
+                            result.pages.extend(fuzz_result.pages);
+                            result.total_pages += fuzz_result.total_pages;
+                            result.total_urls += fuzz_result.total_urls;
+                            result.errors.extend(fuzz_result.errors);
+
+                            if let Some(ref findings) = fuzz_result.secret_findings {
+                                if let Some(ref mut combined_findings) = result.secret_findings {
+                                    combined_findings.total += findings.total;
+                                    combined_findings.critical += findings.critical;
+                                    combined_findings.high += findings.high;
+                                    combined_findings.medium += findings.medium;
+                                    combined_findings.low += findings.low;
+                                } else {
+                                    result.secret_findings = Some(findings.clone());
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            info!("Fuzz URL {} returned error: {}", fuzz_url, e);
+                        }
+                    }
+                }
+
+                eprintln!("{} Fuzz crawl complete", "✓".green().bold());
+            }
         }
     }
 

@@ -4,13 +4,15 @@ use crate::noise_filter::NoiseFilter;
 use crate::normalizer::AdvancedUrlNormalizer;
 use crate::queue::UrlQueue;
 use crate::scope::ScopeValidator;
-use crate::types::{CrawlResult, Finding, FindingStats, Page, Severity};
+use crate::types::{CrawlResult, Finding, FindingStats, Page, Severity, ValidEndpoint};
 use hazler_http::HttpClient;
 use hazler_js_parser::{FrameFileParser, JavaScriptParser, SourceMapParser};
 use hazler_parser::{GraphQLParser, HtmlParser};
 use hazler_secrets::SecretScanner;
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 use url::Url;
@@ -36,6 +38,8 @@ struct CrawlPageContext {
     #[allow(dead_code)]
     graphql_introspect: bool,
     parse_source_maps: bool,
+    /// Minimum confidence threshold for JS-extracted endpoints.
+    js_confidence_threshold: f32,
     #[cfg(feature = "browser")]
     browser: Option<Arc<Browser>>,
 }
@@ -51,6 +55,10 @@ pub struct Crawler {
     sourcemap_parser: SourceMapParser,
     url_normalizer: AdvancedUrlNormalizer,
     secret_scanner: Option<SecretScanner>,
+    /// Optional channel for real-time verified-endpoint delivery.
+    endpoint_tx: Option<UnboundedSender<ValidEndpoint>>,
+    /// Tracks URLs already emitted through the channel to prevent duplicates.
+    emitted_urls: Arc<Mutex<HashSet<String>>>,
     #[cfg(feature = "browser")]
     browser: Option<Arc<Browser>>,
 }
@@ -95,6 +103,8 @@ impl Crawler {
             sourcemap_parser,
             url_normalizer,
             secret_scanner,
+            endpoint_tx: None,
+            emitted_urls: Arc::new(Mutex::new(HashSet::new())),
             #[cfg(feature = "browser")]
             browser: None,
         })
@@ -126,6 +136,46 @@ impl Crawler {
             info!("Browser initialized successfully");
         }
         Ok(())
+    }
+
+    /// Attach a channel sender for real-time valid-endpoint delivery.
+    ///
+    /// When a sender is provided every crawled page that passes the validity
+    /// checks (correct status, non-error body, above minimum body length, not
+    /// noise-filtered) is sent through the channel **before** being added to the
+    /// final `CrawlResult`.  Duplicate URLs are suppressed automatically.
+    ///
+    /// The caller owns the corresponding receiver and can print or process
+    /// endpoints as they arrive.  The channel is implicitly closed when the
+    /// crawler is dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use hazler_core::{Config, Crawler};
+    /// use tokio::sync::mpsc::unbounded_channel;
+    /// use url::Url;
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> anyhow::Result<()> {
+    /// let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    /// let crawler = Crawler::new(Config::new())?.with_endpoint_sender(tx);
+    ///
+    /// let display = tokio::spawn(async move {
+    ///     while let Some(ep) = rx.recv().await {
+    ///         println!("{} {}", ep.status_code, ep.url);
+    ///     }
+    /// });
+    ///
+    /// let result = crawler.crawl(Url::parse("https://example.com")?).await?;
+    /// drop(crawler); // closes the channel so the display task exits
+    /// display.await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_endpoint_sender(mut self, tx: UnboundedSender<ValidEndpoint>) -> Self {
+        self.endpoint_tx = Some(tx);
+        self
     }
 
     /// Start crawling from a given URL
@@ -194,6 +244,7 @@ impl Crawler {
                     let delay_config = delay_config.clone();
                     let graphql_introspect = self.config.graphql_introspect;
                     let parse_source_maps = self.config.parse_source_maps;
+                    let js_confidence_threshold = self.config.js_confidence_threshold;
                     #[cfg(feature = "browser")]
                     let browser = self.browser.clone();
 
@@ -221,6 +272,7 @@ impl Crawler {
                             delay_config,
                             graphql_introspect,
                             parse_source_maps,
+                            js_confidence_threshold,
                             #[cfg(feature = "browser")]
                             browser,
                         };
@@ -241,9 +293,29 @@ impl Crawler {
                     Ok(Ok((page, new_urls))) => {
                         result.total_pages += 1;
 
-                        // In quiet mode, only output URLs with 200 status code in real-time
-                        if self.config.quiet_mode && page.status_code == 200 {
-                            println!("{}", page.url);
+                        // Emit verified endpoints in real-time through the channel.
+                        // A page qualifies only if it was not noise-filtered and it
+                        // passes the full validity check (status, body, length).
+                        if let Some(ref tx) = self.endpoint_tx {
+                            if !page.was_noise_filtered && Self::is_valid_endpoint(&page) {
+                                let canonical = page.url.as_str().to_string();
+                                let should_send = {
+                                    match self.emitted_urls.lock() {
+                                        Ok(mut set) => set.insert(canonical),
+                                        Err(_) => false,
+                                    }
+                                };
+                                if should_send {
+                                    let _ = tx.send(ValidEndpoint {
+                                        url: page.url.clone(),
+                                        status_code: page.status_code,
+                                        content_type: page
+                                            .content_type
+                                            .clone()
+                                            .unwrap_or_default(),
+                                    });
+                                }
+                            }
                         }
 
                         // Add new URLs to queue
@@ -327,17 +399,62 @@ impl Crawler {
         Self::crawl_page_with_http(url, depth, context).await
     }
 
-    /// Detect whether a 200 OK response body indicates a soft-forbidden or
-    /// soft-not-found page (e.g. a custom error page that returns HTTP 200).
+    /// Determine whether a crawled `Page` is a truly valid, reachable endpoint.
+    ///
+    /// A page is considered valid when **all** of the following hold:
+    /// 1. The HTTP status code is in the 2xx range.
+    /// 2. The response body is longer than `MIN_BODY_LEN` bytes (very short
+    ///    responses are almost always empty error stubs).
+    /// 3. The response body does not begin with soft-error keywords (custom
+    ///    error pages that return HTTP 200).
+    ///
+    /// This function is the single gate used to decide whether a page's URL is
+    /// emitted through the real-time valid-endpoint channel, ensuring users only
+    /// see genuinely reachable endpoints.
+    fn is_valid_endpoint(page: &Page) -> bool {
+        // Only 2xx responses are considered valid endpoints.
+        if !(200..300).contains(&page.status_code) {
+            return false;
+        }
+
+        // Very short responses are almost always error stubs.
+        const MIN_BODY_LEN: usize = 64;
+        if page.body.len() < MIN_BODY_LEN {
+            // Exception: API JSON endpoints can legitimately return small
+            // bodies (e.g. `{}` or `{"ok":true}`).  Allow short bodies when
+            // the content-type indicates JSON or a non-HTML data format.
+            let is_data_type = page
+                .content_type
+                .as_deref()
+                .map(|ct| {
+                    ct.contains("application/json")
+                        || ct.contains("text/plain")
+                        || ct.contains("application/xml")
+                        || ct.contains("text/xml")
+                        || ct.contains("text/csv")
+                })
+                .unwrap_or(false);
+            if !is_data_type {
+                return false;
+            }
+        }
+
+        // Reject soft-error bodies (custom error pages returning HTTP 200).
+        if Self::is_soft_error_body(&page.body) {
+            return false;
+        }
+
+        true
+    }
+
+    /// Detect whether a response body indicates a soft-error page — i.e. a
+    /// custom 403/404/etc. page that was served with HTTP 200.
     ///
     /// Only the first 4 KB of the body is inspected so that the check is cheap
-    /// even for large responses.
-    fn is_soft_forbidden_body(body: &str) -> bool {
-        // Examine only the beginning of the document – real error pages put the
-        // message near the top, while legitimate pages with accidental matches
-        // (e.g. help docs that describe permission errors) tend to be much longer
-        // and contain the keyword deep in the body.
-        //
+    /// even for large responses.  Real error pages put the message near the top,
+    /// while legitimate pages that merely *mention* permission errors (e.g. help
+    /// docs) tend to be much longer and contain the keyword deep in the body.
+    fn is_soft_error_body(body: &str) -> bool {
         // Find a safe UTF-8 boundary at or before 4096 bytes so we never split
         // a multi-byte character.
         let limit = body
@@ -346,7 +463,6 @@ impl Crawler {
             .take_while(|&i| i < 4096)
             .last()
             .map(|i| {
-                // Advance past the last character that starts before the limit.
                 body[i..]
                     .chars()
                     .next()
@@ -356,7 +472,7 @@ impl Crawler {
             .unwrap_or(body.len().min(4096));
         let lower = body[..limit].to_lowercase();
 
-        // Common soft-403 / soft-404 indicators
+        // ── Soft-403 indicators ──────────────────────────────────────────────
         lower.contains("403 forbidden")
             || lower.contains("access denied")
             || lower.contains("access is denied")
@@ -365,10 +481,41 @@ impl Crawler {
             || lower.contains("permission denied")
             || lower.contains("not authorized")
             || lower.contains("unauthorized access")
+            || lower.contains("you are not allowed")
+            || lower.contains("forbidden")
+            // ── Soft-404 indicators ──────────────────────────────────────────
             || lower.contains("404 not found")
             || lower.contains("page not found")
             || lower.contains("resource not found")
+            || lower.contains("this page does not exist")
+            || lower.contains("this page doesn't exist")
+            || lower.contains("no such page")
+            || lower.contains("the resource you requested")
+            || lower.contains("nothing here")
+            || lower.contains("error 404")
+            // ── Generic error indicators ─────────────────────────────────────
+            || lower.contains("invalid request")
+            || lower.contains("bad request")
+            || lower.contains("no results found")
+            // ── Nginx / Apache default error pages ───────────────────────────
+            || (lower.contains("<title>") && lower.contains("nginx") && lower.contains("error"))
+            || (lower.contains("<title>") && lower.contains("apache") && lower.contains("error"))
+            // ── Cloudflare error indicators ──────────────────────────────────
+            || lower.contains("cf-error-code")
+            || lower.contains("cf_chl_opt")
+            // ── Common CMS error indicators ──────────────────────────────────
+            || (lower.contains("wordpress") && lower.contains("not found"))
     }
+
+    /// Kept as a compatibility shim used by the secret-scanning path.
+    ///
+    /// Delegates to `is_soft_error_body` so both paths share the same
+    /// expanded keyword list.
+    #[inline]
+    fn is_soft_forbidden_body(body: &str) -> bool {
+        Self::is_soft_error_body(body)
+    }
+
 
     /// Determine if we should use browser for this URL
     /// Browser is useful for HTML pages but not for API endpoints or static files
@@ -545,19 +692,20 @@ impl Crawler {
             match filter_result {
                 Ok(mut filter) => filter.should_filter(response.status_code, content_length),
                 Err(e) => {
-                    warn!("Noise filter mutex poisoned: {}, disabling filter", e);
+                    debug!("Noise filter mutex poisoned: {}, disabling filter", e);
                     false // Continue without filtering if mutex is poisoned
                 }
             }
         };
 
         if should_filter {
-            warn!(
+            debug!(
                 "Filtering response from {} (status: {}, length: {}) as noise",
                 url, response.status_code, content_length
             );
-            // Return early with empty page and no new URLs
-            let page = Page::new(url.clone(), response.status_code, String::new(), depth);
+            // Return early with an empty, noise-flagged page and no new URLs.
+            let mut page = Page::new(url.clone(), response.status_code, String::new(), depth);
+            page.was_noise_filtered = true;
             return Ok((page, Vec::new()));
         }
 
@@ -592,14 +740,27 @@ impl Crawler {
             || url.path().ends_with(".js")
             || url.path().ends_with(".json")
         {
-            // JavaScript or JSON content - use JS parser
-            let extracted = context.js_parser.extract_endpoints(&response.body, &url);
-            info!(
-                "Extracted {} endpoints from JavaScript at {}",
-                extracted.len(),
-                url
+            // JavaScript or JSON content - use JS parser with confidence filtering.
+            // Only endpoints that score at or above the configured threshold are
+            // queued for crawling, which reduces noise from speculative patterns.
+            let extracted_with_confidence = context
+                .js_parser
+                .extract_endpoints_with_confidence(&response.body, &url);
+            let threshold = context.js_confidence_threshold;
+            let before = extracted_with_confidence.len();
+            let filtered: Vec<Url> = extracted_with_confidence
+                .into_iter()
+                .filter(|(_, confidence)| *confidence >= threshold)
+                .map(|(url, _)| url)
+                .collect();
+            debug!(
+                "Extracted {} endpoints from JavaScript at {} ({} below confidence threshold {:.2})",
+                filtered.len(),
+                url,
+                before - filtered.len(),
+                threshold
             );
-            links = extracted;
+            links = filtered;
 
             // Check for GraphQL endpoint
             if let Some(graphql_endpoint) = context
@@ -662,9 +823,16 @@ impl Crawler {
 
         // If aggressive mode is enabled, also try JS parser on HTML content
         if context.aggressive && content_type.contains("text/html") {
-            let js_endpoints = context.js_parser.extract_endpoints(&response.body, &url);
+            let threshold = context.js_confidence_threshold;
+            let js_endpoints: Vec<Url> = context
+                .js_parser
+                .extract_endpoints_with_confidence(&response.body, &url)
+                .into_iter()
+                .filter(|(_, c)| *c >= threshold)
+                .map(|(u, _)| u)
+                .collect();
             if !js_endpoints.is_empty() {
-                info!(
+                debug!(
                     "Extracted {} additional endpoints from inline JS at {}",
                     js_endpoints.len(),
                     url

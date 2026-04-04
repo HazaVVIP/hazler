@@ -119,4 +119,4 @@ pub use rate_limiter::{RateLimiter, RateLimiterConfig};
 pub use retry::{is_retryable_status, retry_with_backoff, RetryConfig};
 pub use scope::ScopeValidator;
 pub use shutdown::{GracefulShutdown, ShutdownHandler};
-pub use types::{CrawlResult, Finding, FindingStats, Page, Severity};
+pub use types::{CrawlResult, Finding, FindingStats, Page, Severity, ValidEndpoint};

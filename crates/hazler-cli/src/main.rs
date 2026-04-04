@@ -1,11 +1,13 @@
 use clap::Parser;
 use colored::Colorize;
-use hazler_core::{Config, Crawler};
+use hazler_core::{Config, Crawler, ValidEndpoint};
 use hazler_http::{ApiKeyLocation, AuthConfig, AuthMethod};
 use std::collections::HashMap;
 use std::fs;
 use std::process;
-use tracing::{error, info, Level};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use tracing::error;
 use url::Url;
 
 mod output;
@@ -58,8 +60,8 @@ struct Args {
     #[arg(short = 't', long, default_value = "10")]
     timeout: u64,
 
-    /// Output format (json, jsonl, urls, csv, tree, nuclei, ffuf, burp, openapi, or postman)
-    #[arg(short = 'o', long, default_value = "tree")]
+    /// Output format (json, jsonl, urls, csv, clean, tree, nuclei, ffuf, burp, openapi, or postman)
+    #[arg(short = 'o', long, default_value = "clean")]
     output_format: String,
 
     /// Include response body in output (excluded by default for clean output)
@@ -330,6 +332,27 @@ struct Args {
     /// Example: --auth-file credentials.json
     #[arg(long, value_name = "FILE")]
     auth_file: Option<String>,
+
+    /// Suppress the ephemeral progress indicator on stderr
+    /// By default a single updating line shows how many valid endpoints have
+    /// been found so far.  Use this flag to silence it (e.g. when stderr is
+    /// redirected to a file).
+    #[arg(long)]
+    no_progress: bool,
+
+    /// Suppress the post-crawl summary printed to stderr
+    /// Useful when using hazler in a pipeline where stderr must stay clean
+    /// Example: hazler https://target.com --quiet | tee results.txt
+    #[arg(short = 'q', long)]
+    quiet: bool,
+
+    /// Minimum confidence threshold for JS-extracted endpoints (0.0–1.0)
+    /// Endpoints extracted from JavaScript via regex patterns are scored by how
+    /// reliable the extraction pattern is.  Only endpoints scoring at or above
+    /// this threshold are queued for crawling.
+    /// Default: 0.5 (balanced).  Higher = fewer but more accurate endpoints.
+    #[arg(long, default_value = "0.5", value_name = "THRESHOLD")]
+    js_confidence: f32,
 }
 
 /// Export specification parsed from TYPE:FILE format
@@ -631,17 +654,17 @@ fn run_wizard() -> Args {
     let no_secrets = secrets_input.trim().to_lowercase() == "n";
 
     // Output format options
-    const FORMAT_URLS: &str = "urls";
+    const FORMAT_CLEAN: &str = "clean";
     const FORMAT_TREE: &str = "tree";
     const FORMAT_JSON: &str = "json";
     const FORMAT_CSV: &str = "csv";
 
     // Ask about output format
     println!("\n{}", "Output format options:".yellow());
-    println!("  1. Clean URLs only (default) - Only successful URLs");
-    println!("  2. Tree view - Visual hierarchy");
-    println!("  3. JSON - Machine readable");
-    println!("  4. CSV - Spreadsheet format");
+    println!("  1. Clean (default) - Real-time verified endpoints, one per line");
+    println!("  2. Tree view - Visual hierarchy (after crawl)");
+    println!("  3. JSON - Machine readable (after crawl)");
+    println!("  4. CSV - Spreadsheet format (after crawl)");
     print!("{} ", "Choose format (1-4, default 1):".bright_white());
     io::stdout().flush().expect("Failed to flush stdout");
     io::stdin()
@@ -651,7 +674,7 @@ fn run_wizard() -> Args {
         "2" => (FORMAT_TREE.to_string(), true),
         "3" => (FORMAT_JSON.to_string(), true),
         "4" => (FORMAT_CSV.to_string(), true),
-        _ => (FORMAT_URLS.to_string(), false),
+        _ => (FORMAT_CLEAN.to_string(), false),
     };
 
     // Ask about HTML report export
@@ -755,6 +778,54 @@ fn run_wizard() -> Args {
         progress: 5,
         auth: Vec::new(),
         auth_file: None,
+        no_progress: false,
+        quiet: false,
+        js_confidence: 0.5,
+    }
+}
+
+/// Format a single `ValidEndpoint` for the real-time clean output line.
+///
+/// Produces a coloured `STATUS_CODE  URL  [content-type]` string.
+fn format_valid_endpoint(ep: &ValidEndpoint, use_color: bool) -> String {
+    let status_str = ep.status_code.to_string();
+    let url_str = ep.url.as_str();
+    let ct = &ep.content_type;
+
+    if !use_color {
+        if ct.is_empty() {
+            return format!("{} {}", status_str, url_str);
+        }
+        let padding = if url_str.len() < 60 {
+            " ".repeat(60 - url_str.len())
+        } else {
+            "  ".to_string()
+        };
+        return format!("{} {}{}{}", status_str, url_str, padding, ct);
+    }
+
+    let colored_status = match ep.status_code {
+        200..=299 => status_str.green().bold().to_string(),
+        300..=399 => status_str.yellow().bold().to_string(),
+        _ => status_str.red().bold().to_string(),
+    };
+
+    let padding = if url_str.len() < 60 {
+        " ".repeat(60 - url_str.len())
+    } else {
+        "  ".to_string()
+    };
+
+    if ct.is_empty() {
+        format!("{} {}", colored_status, url_str.bright_white())
+    } else {
+        format!(
+            "{} {}{}{}",
+            colored_status,
+            url_str.bright_white(),
+            padding,
+            ct.dimmed()
+        )
     }
 }
 
@@ -767,21 +838,28 @@ async fn main() {
         args = run_wizard();
     }
 
-    // Setup logging
-    let log_level = if args.verbose {
-        Level::DEBUG
-    } else {
-        Level::INFO
-    };
-
     // Disable colors if --no-color / --plain is set or if NO_COLOR env var is present
     if args.no_color || args.plain || std::env::var("NO_COLOR").is_ok() {
         colored::control::set_override(false);
     }
-    tracing_subscriber::fmt()
-        .with_max_level(log_level)
-        .with_target(false)
-        .init();
+
+    // Initialise tracing only when --verbose is set.  In normal operation the
+    // terminal is kept clean — only verified endpoints (via the channel) and
+    // the final summary (stderr) are shown.
+    if args.verbose {
+        use tracing::Level;
+        tracing_subscriber::fmt()
+            .with_max_level(Level::DEBUG)
+            .with_target(false)
+            .init();
+    } else {
+        // Install a subscriber that only logs ERROR-level events (fatal issues).
+        use tracing::Level;
+        tracing_subscriber::fmt()
+            .with_max_level(Level::ERROR)
+            .with_target(false)
+            .init();
+    }
 
     // Parse the URL(s) - support pipeline mode with stdin
     let urls: Vec<Url> = if args.url == "-" {
@@ -871,10 +949,9 @@ async fn main() {
 
     // Display authentication info if configured
     if let Some(ref auth) = auth_config {
-        info!(
-            "Authentication enabled: {}",
-            auth.method.sanitized_display()
-        );
+        if args.verbose {
+            eprintln!("Authentication enabled: {}", auth.method.sanitized_display());
+        }
     }
 
     // Configure the crawler
@@ -937,13 +1014,79 @@ async fn main() {
     config = config.graphql_introspect(enable_graphql);
     config = config.parse_source_maps(!args.no_source_maps);
 
-    // Apply quiet mode (default is quiet unless --full-output is specified)
-    let quiet_mode = !args.full_output;
-    config = config.quiet_mode(quiet_mode);
+    // Apply JS confidence threshold
+    let js_confidence = args.js_confidence.clamp(0.0, 1.0);
+    config = config.js_confidence_threshold(js_confidence);
+
+    // quiet_mode is kept for API compatibility but the channel replaces its
+    // old println! behaviour; no need to set it here.
+
+    // ── Real-time valid-endpoint channel ────────────────────────────────────
+    // Create a channel so the crawler can send verified endpoints in real-time.
+    // The display task reads from the receiver and prints to stdout while the
+    // crawl runs concurrently.
+    let (endpoint_tx, mut endpoint_rx) =
+        tokio::sync::mpsc::unbounded_channel::<ValidEndpoint>();
+
+    // Shared counter for the progress indicator
+    let valid_count = Arc::new(AtomicUsize::new(0));
+    let valid_count_display = Arc::clone(&valid_count);
+    let show_progress = !args.no_progress && !args.quiet;
+    let use_color = !args.no_color && !args.plain && std::env::var("NO_COLOR").is_err();
+
+    // Spawn the display task that consumes verified endpoints and prints them.
+    let display_handle: tokio::task::JoinHandle<()> = tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1));
+        // Consume the first (immediate) tick so the interval starts cleanly.
+        ticker.tick().await;
+
+        loop {
+            tokio::select! {
+                msg = endpoint_rx.recv() => {
+                    match msg {
+                        Some(ep) => {
+                            let n = valid_count_display.fetch_add(1, Ordering::Relaxed) + 1;
+                            // Clear the current progress line before printing the endpoint.
+                            if show_progress {
+                                eprint!("\r\x1b[K");
+                            }
+                            println!("{}", format_valid_endpoint(&ep, use_color));
+                            // Reprint the progress line immediately after.
+                            if show_progress {
+                                eprint!(
+                                    "\r[scanning] {} valid endpoint{} found",
+                                    n,
+                                    if n == 1 { "" } else { "s" }
+                                );
+                            }
+                        }
+                        None => {
+                            // Channel closed — crawl is done; clear progress line.
+                            if show_progress {
+                                eprint!("\r\x1b[K");
+                            }
+                            break;
+                        }
+                    }
+                }
+                _ = ticker.tick() => {
+                    // Periodic progress refresh (no endpoint arrived this second).
+                    if show_progress {
+                        let n = valid_count_display.load(Ordering::Relaxed);
+                        eprint!(
+                            "\r[scanning] {} valid endpoint{} found",
+                            n,
+                            if n == 1 { "" } else { "s" }
+                        );
+                    }
+                }
+            }
+        }
+    });
 
     // Create and run crawler (mutable to support browser initialization)
     let mut crawler = match Crawler::new(config) {
-        Ok(c) => c,
+        Ok(c) => c.with_endpoint_sender(endpoint_tx),
         Err(e) => {
             error!("Failed to create crawler: {}", e);
             process::exit(1);
@@ -953,7 +1096,7 @@ async fn main() {
     // Initialize browser if enabled
     if args.browser {
         match crawler.init_browser().await {
-            Ok(_) => info!("Browser initialized successfully"),
+            Ok(_) => {}
             Err(e) => {
                 error!("Failed to initialize browser: {}", e);
                 process::exit(1);
@@ -972,8 +1115,8 @@ async fn main() {
     };
 
     for (idx, start_url) in urls.iter().enumerate() {
-        if urls.len() > 1 {
-            info!("Crawling URL {}/{}: {}", idx + 1, urls.len(), start_url);
+        if urls.len() > 1 && args.verbose {
+            eprintln!("Crawling URL {}/{}: {}", idx + 1, urls.len(), start_url);
         }
 
         match crawler.crawl(start_url.clone()).await {
@@ -1021,7 +1164,9 @@ async fn main() {
         let fuzzed_urls = apply_fuzzing(&discovered_urls, args.fuzz, &args.fuzz_level);
 
         if !fuzzed_urls.is_empty() {
-            info!("Generated {} fuzzed URLs for testing", fuzzed_urls.len());
+            if args.verbose {
+                eprintln!("Generated {} fuzzed URLs for testing", fuzzed_urls.len());
+            }
 
             // Write fuzzed URLs to file if requested
             if let Some(ref fuzz_output_path) = args.fuzz_output {
@@ -1068,7 +1213,9 @@ async fn main() {
                             }
                         }
                         Err(e) => {
-                            info!("Fuzz URL {} returned error: {}", fuzz_url, e);
+                            if args.verbose {
+                                eprintln!("Fuzz URL {} returned error: {}", fuzz_url, e);
+                            }
                         }
                     }
                 }
@@ -1077,6 +1224,15 @@ async fn main() {
             }
         }
     }
+
+    // Drop the crawler to close the endpoint channel sender.
+    // This signals the display task that no more endpoints are coming, allowing
+    // it to drain any buffered items and exit cleanly.
+    drop(crawler);
+
+    // Wait for the display task to finish printing all valid endpoints before
+    // proceeding to post-crawl output.
+    display_handle.await.ok();
 
     // Handle baseline and comparison if requested
     if args.baseline.is_some() || args.compare.is_some() {
@@ -1419,132 +1575,144 @@ async fn main() {
     let exclude_body = !args.include_body;
     let formatter = OutputFormatter::new(exclude_body, args.fields);
 
-    // In quiet mode (default), skip final output as URLs with 200 status were already printed in real-time
-    // Use --full-output to see detailed tree view and statistics
-    if quiet_mode {
-        // Exit silently, URLs were already printed during crawl
-        return;
-    }
-
-    // Output results based on format (only when --full-output is used)
-    match args.output_format.as_str() {
-        "json" => match formatter.format_json(&result) {
-            Ok(json) => println!("{}", json),
-            Err(e) => {
-                error!("Failed to serialize results: {}", e);
-                process::exit(1);
-            }
-        },
-        "jsonl" => match formatter.format_jsonl(&result) {
-            Ok(lines) => {
-                for line in lines {
-                    println!("{}", line);
+    // Post-crawl formatted output — only shown when --full-output is requested.
+    // In the default mode the verified endpoints were already printed in
+    // real-time via the channel while the crawl was running.
+    if args.full_output {
+        match args.output_format.as_str() {
+            "clean" => {
+                let out = formatter.format_clean(&result);
+                if !out.is_empty() {
+                    print!("{}", out);
                 }
             }
-            Err(_e) => {}
-        },
-        "urls" => {
-            println!("{}", formatter.format_urls(&result));
-        }
-        "csv" => {
-            println!("{}", formatter.format_csv(&result));
-        }
-        "tree" => {
-            println!("{}", formatter.format_tree(&result));
-        }
-        "nuclei" => match formatter.format_nuclei(&result) {
-            Ok(lines) => {
-                for line in lines {
-                    println!("{}", line);
+            "json" => match formatter.format_json(&result) {
+                Ok(json) => println!("{}", json),
+                Err(e) => {
+                    error!("Failed to serialize results: {}", e);
+                    process::exit(1);
                 }
+            },
+            "jsonl" => match formatter.format_jsonl(&result) {
+                Ok(lines) => {
+                    for line in lines {
+                        println!("{}", line);
+                    }
+                }
+                Err(_e) => {}
+            },
+            "urls" => {
+                println!("{}", formatter.format_urls(&result));
             }
-            Err(e) => {
-                error!("Failed to serialize nuclei results: {}", e);
+            "csv" => {
+                println!("{}", formatter.format_csv(&result));
+            }
+            "tree" => {
+                println!("{}", formatter.format_tree(&result));
+            }
+            "nuclei" => match formatter.format_nuclei(&result) {
+                Ok(lines) => {
+                    for line in lines {
+                        println!("{}", line);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to serialize nuclei results: {}", e);
+                    process::exit(1);
+                }
+            },
+            "ffuf" => match formatter.format_ffuf(&result) {
+                Ok(lines) => {
+                    for line in lines {
+                        println!("{}", line);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to serialize ffuf results: {}", e);
+                    process::exit(1);
+                }
+            },
+            "burp" => {
+                println!("{}", formatter.format_burp(&result));
+            }
+            "openapi" => {
+                println!("{}", format_openapi(&result));
+            }
+            "postman" => {
+                println!("{}", format_postman(&result));
+            }
+            _ => {
+                error!(
+                    "Unknown output format: {}. Valid formats: clean, json, jsonl, urls, csv, tree, nuclei, ffuf, burp, openapi, postman",
+                    args.output_format
+                );
                 process::exit(1);
             }
-        },
-        "ffuf" => match formatter.format_ffuf(&result) {
-            Ok(lines) => {
-                for line in lines {
-                    println!("{}", line);
+        }
+    }
+
+    // Print summary to stderr.
+    // Suppressed when --quiet is set (e.g. for scripting / pipeline use).
+    if !args.quiet {
+        let valid_found = valid_count.load(Ordering::Relaxed);
+        eprintln!("\n{}", "═".repeat(80).bright_blue());
+        eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
+        eprintln!("{}", "═".repeat(80).bright_blue());
+        eprintln!(
+            "{} {}",
+            "Valid endpoints found:".bright_white(),
+            valid_found.to_string().green().bold()
+        );
+        eprintln!(
+            "{} {}",
+            "Total pages crawled:".bright_white(),
+            result.total_pages.to_string().green().bold()
+        );
+        eprintln!(
+            "{} {}",
+            "Total URLs discovered:".bright_white(),
+            result.total_urls.to_string().cyan().bold()
+        );
+        eprintln!(
+            "{} {}",
+            "Errors encountered:".bright_white(),
+            if !result.errors.is_empty() {
+                result.errors.len().to_string().red().bold()
+            } else {
+                result.errors.len().to_string().green().bold()
+            }
+        );
+
+        // Show secrets summary if any found
+        if let Some(ref stats) = result.secret_findings {
+            if stats.total > 0 {
+                eprintln!(
+                    "\n{} {}",
+                    "🔒 Secrets found:".bright_red().bold(),
+                    stats.total.to_string().bright_red().bold()
+                );
+                if stats.critical > 0 {
+                    eprintln!("  {} {}", "Critical:".red(), stats.critical);
+                }
+                if stats.high > 0 {
+                    eprintln!("  {} {}", "High:".yellow(), stats.high);
+                }
+                if stats.medium > 0 {
+                    eprintln!("  {} {}", "Medium:".yellow(), stats.medium);
+                }
+                if stats.low > 0 {
+                    eprintln!("  {} {}", "Low:".cyan(), stats.low);
                 }
             }
-            Err(e) => {
-                error!("Failed to serialize ffuf results: {}", e);
-                process::exit(1);
+        }
+
+        if !result.errors.is_empty() && args.verbose {
+            eprintln!("\n{}", "⚠️  ERRORS".yellow().bold());
+            for err in &result.errors {
+                eprintln!("  {} {}", "•".red(), err);
             }
-        },
-        "burp" => {
-            println!("{}", formatter.format_burp(&result));
         }
-        "openapi" => {
-            println!("{}", format_openapi(&result));
-        }
-        "postman" => {
-            println!("{}", format_postman(&result));
-        }
-        _ => {
-            error!(
-                        "Unknown output format: {}. Valid formats: json, jsonl, urls, csv, tree, nuclei, ffuf, burp, openapi, postman",
-                        args.output_format
-                    );
-            process::exit(1);
-        }
+
+        eprintln!("{}\n", "═".repeat(80).bright_blue());
     }
-
-    // Print summary to stderr (always shown after results output)
-    eprintln!("\n{}", "═".repeat(80).bright_blue());
-    eprintln!("{}", "📝 CRAWL SUMMARY".bright_cyan().bold());
-    eprintln!("{}", "═".repeat(80).bright_blue());
-    eprintln!(
-        "{} {}",
-        "Total pages crawled:".bright_white(),
-        result.total_pages.to_string().green().bold()
-    );
-    eprintln!(
-        "{} {}",
-        "Total URLs discovered:".bright_white(),
-        result.total_urls.to_string().cyan().bold()
-    );
-    eprintln!(
-        "{} {}",
-        "Errors encountered:".bright_white(),
-        if !result.errors.is_empty() {
-            result.errors.len().to_string().red().bold()
-        } else {
-            result.errors.len().to_string().green().bold()
-        }
-    );
-
-    // Show secrets summary if any found
-    if let Some(ref stats) = result.secret_findings {
-        if stats.total > 0 {
-            eprintln!(
-                "\n{} {}",
-                "🔒 Secrets found:".bright_red().bold(),
-                stats.total.to_string().bright_red().bold()
-            );
-            if stats.critical > 0 {
-                eprintln!("  {} {}", "Critical:".red(), stats.critical);
-            }
-            if stats.high > 0 {
-                eprintln!("  {} {}", "High:".yellow(), stats.high);
-            }
-            if stats.medium > 0 {
-                eprintln!("  {} {}", "Medium:".yellow(), stats.medium);
-            }
-            if stats.low > 0 {
-                eprintln!("  {} {}", "Low:".cyan(), stats.low);
-            }
-        }
-    }
-
-    if !result.errors.is_empty() && args.verbose {
-        eprintln!("\n{}", "⚠️  ERRORS".yellow().bold());
-        for error in &result.errors {
-            eprintln!("  {} {}", "•".red(), error);
-        }
-    }
-
-    eprintln!("{}\n", "═".repeat(80).bright_blue());
 }

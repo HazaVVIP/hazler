@@ -61,6 +61,13 @@ pub struct Config {
     pub auth_config_file: Option<String>,
     /// Quiet mode - only output 200 status codes in real-time
     pub quiet_mode: bool,
+    /// Minimum confidence threshold for JS-extracted endpoints (0.0–1.0).
+    ///
+    /// Endpoints extracted from JavaScript by regex patterns are assigned a
+    /// confidence score based on how reliable the pattern is.  Only endpoints
+    /// with a confidence score >= this value are added to the crawl queue.
+    /// Lower values discover more endpoints but increase false positives.
+    pub js_confidence_threshold: f32,
 }
 
 impl Default for Config {
@@ -87,6 +94,7 @@ impl Default for Config {
             parse_source_maps: true, // Enable source map parsing by default
             auth_config_file: None,
             quiet_mode: false,
+            js_confidence_threshold: 0.5,
         }
     }
 }
@@ -437,6 +445,29 @@ impl Config {
     /// ```
     pub fn quiet_mode(mut self, enabled: bool) -> Self {
         self.quiet_mode = enabled;
+        self
+    }
+
+    /// Set the minimum confidence threshold for JS-extracted endpoints.
+    ///
+    /// Endpoints extracted from JavaScript by regex patterns are scored from
+    /// 0.0 (very uncertain) to 1.0 (highly reliable).  Only endpoints whose
+    /// score is at or above this threshold are queued for crawling.
+    ///
+    /// Defaults to 0.5.  Lower values discover more endpoints but increase
+    /// false positives; higher values reduce noise at the cost of coverage.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use hazler_core::Config;
+    ///
+    /// // Only queue high-confidence JS endpoints
+    /// let config = Config::new().js_confidence_threshold(0.75);
+    /// assert_eq!(config.js_confidence_threshold, 0.75);
+    /// ```
+    pub fn js_confidence_threshold(mut self, threshold: f32) -> Self {
+        self.js_confidence_threshold = threshold.clamp(0.0, 1.0);
         self
     }
 }

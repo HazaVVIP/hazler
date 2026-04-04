@@ -219,6 +219,67 @@ impl OutputFormatter {
         output
     }
 
+    /// Format as the clean one-line-per-endpoint list.
+    ///
+    /// This is the **default** output format.  It prints only valid (2xx)
+    /// endpoints, one per line, with the status code, URL and content-type:
+    ///
+    /// ```text
+    /// 200 https://example.com/api/v1/users          application/json
+    /// 200 https://example.com/dashboard             text/html
+    /// ```
+    ///
+    /// Status codes are colour-coded (green 2xx, yellow 3xx, red 4xx/5xx).
+    /// The content-type is shown in dimmed grey.  Non-2xx pages are excluded
+    /// from this format because they do not represent reachable valid endpoints.
+    pub fn format_clean(&self, result: &CrawlResult) -> String {
+        let mut output = String::new();
+
+        for page in &result.pages {
+            // Only show successfully reachable pages
+            if !(200..300).contains(&page.status_code) {
+                continue;
+            }
+
+            let (_, status_color) = get_status_indicator(page.status_code);
+            let status_str = page.status_code.to_string();
+            let colored_status = apply_color(&status_str, status_color);
+
+            let url_str = page.url.as_str();
+            let ct = page.content_type.as_deref().unwrap_or("");
+
+            // Align the content-type column at a fixed offset (60 chars for URL)
+            let padding = if url_str.len() < 60 {
+                " ".repeat(60 - url_str.len())
+            } else {
+                "  ".to_string()
+            };
+
+            output.push_str(&format!(
+                "{} {}{}",
+                colored_status,
+                url_str.bright_white(),
+                if ct.is_empty() {
+                    String::new()
+                } else {
+                    format!("{}{}", padding, ct.dimmed())
+                }
+            ));
+
+            // Append secrets indicator if any found
+            if !page.secrets.is_empty() {
+                output.push_str(&format!(
+                    "  {}",
+                    format!("🔒 {} secrets", page.secrets.len()).bright_red()
+                ));
+            }
+
+            output.push('\n');
+        }
+
+        output
+    }
+
     /// Escape CSV field
     fn escape_csv(s: &str) -> String {
         s.replace("\"", "\"\"")

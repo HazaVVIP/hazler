@@ -2,6 +2,21 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use url::Url;
 
+/// A verified, valid endpoint emitted in real-time through the output channel.
+///
+/// Only pages that pass all validity checks (correct HTTP status, non-error
+/// response body, not noise-filtered, above minimum body length) are emitted
+/// as `ValidEndpoint` values.
+#[derive(Debug, Clone)]
+pub struct ValidEndpoint {
+    /// The URL of the endpoint
+    pub url: Url,
+    /// HTTP status code
+    pub status_code: u16,
+    /// Content-Type of the response (empty string when unknown)
+    pub content_type: String,
+}
+
 /// Severity level for findings
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Severity {
@@ -52,6 +67,9 @@ pub struct Page {
     /// Secret findings (if secrets scanning is enabled)
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub secrets: Vec<Finding>,
+    /// Whether this page was suppressed by the noise filter (repetitive response pattern)
+    #[serde(skip)]
+    pub was_noise_filtered: bool,
 }
 
 impl Page {
@@ -65,6 +83,7 @@ impl Page {
             links: Vec::new(),
             depth,
             secrets: Vec::new(),
+            was_noise_filtered: false,
         }
     }
 }

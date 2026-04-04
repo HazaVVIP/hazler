@@ -57,6 +57,44 @@ static JS_URL_PATTERNS: &[&str] = &[
     r#"import\s+.*\s+from\s+["']([^"']+)["']"#,
 ];
 
+/// Confidence scores for each pattern in `JS_URL_PATTERNS` (0.0 – 1.0).
+///
+/// A higher score means the match is very likely to be a real, reachable
+/// endpoint.  A lower score means the pattern is more speculative (e.g. a
+/// general string literal or an import path).
+static JS_URL_PATTERN_CONFIDENCE: &[f32] = &[
+    0.6,  // absolute URL in string quotes
+    0.5,  // relative path in string quotes (very broad)
+    0.9,  // fetch() with string literal
+    0.75, // fetch() with template literal (variable substitution applied)
+    0.9,  // XMLHttpRequest .open()
+    0.9,  // axios.method() with string
+    0.85, // axios({ url: })
+    0.85, // $.ajax({ url: })
+    0.85, // $.get/.post()
+    0.7,  // api/endpoint/url/path/route assignment
+    0.7,  // template literal /api/…
+    0.65, // template literal https://…
+    0.75, // path: "…"
+    0.8,  // route: "…"
+    0.8,  // graphql/gql endpoint reference
+    0.8,  // WebSocket wss?://
+    0.75, // rpc: "…"
+    0.8,  // .get("…")
+    0.8,  // .post("…")
+    0.8,  // .put("…")
+    0.8,  // .delete("…")
+    0.8,  // .patch("…")
+    0.85, // <Route path= (React Router)
+    0.85, // useNavigate() (React Router)
+    0.85, // RouterModule.forRoot() (Angular)
+    0.85, // .navigate([…]) (Angular)
+    0.85, // router.push() (Vue Router)
+    0.75, // /api/… literal (Next.js style)
+    0.9,  // Express app/router.method()
+    0.3,  // import … from "…" (usually a module path, rarely an endpoint)
+];
+
 /// Template variable pattern for replacement
 static TEMPLATE_VAR_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\$\{[^}]+\}").expect("Failed to compile template variable regex"));
@@ -70,6 +108,13 @@ pub struct JavaScriptParser {
 impl JavaScriptParser {
     /// Create a new JavaScript parser
     pub fn new() -> Result<Self> {
+        // Verify that the confidence array stays in sync with the pattern array.
+        debug_assert_eq!(
+            JS_URL_PATTERNS.len(),
+            JS_URL_PATTERN_CONFIDENCE.len(),
+            "JS_URL_PATTERNS and JS_URL_PATTERN_CONFIDENCE must have the same length"
+        );
+
         let patterns = JS_URL_PATTERNS
             .iter()
             .map(|p| Regex::new(p))
@@ -80,10 +125,41 @@ impl JavaScriptParser {
 
     /// Extract endpoints from JavaScript content
     pub fn extract_endpoints(&self, js_content: &str, base_url: &Url) -> Vec<Url> {
-        let mut endpoints = HashSet::new();
+        self.extract_endpoints_with_confidence(js_content, base_url)
+            .into_iter()
+            .map(|(url, _)| url)
+            .collect()
+    }
+
+    /// Extract endpoints from JavaScript content together with a confidence score.
+    ///
+    /// Each returned `(Url, f32)` pair contains the discovered endpoint and a
+    /// confidence value in `[0.0, 1.0]` indicating how reliable the extraction
+    /// pattern is.  Callers can filter on the confidence value to reduce false
+    /// positives from speculative patterns (e.g. import paths).
+    ///
+    /// Framework-specific patterns are assigned a confidence of 0.85.
+    pub fn extract_endpoints_with_confidence(
+        &self,
+        js_content: &str,
+        base_url: &Url,
+    ) -> Vec<(Url, f32)> {
+        // Use a map so that if the same URL is matched by multiple patterns we
+        // keep the *highest* confidence score for it.
+        let mut endpoint_confidence: std::collections::HashMap<String, (Url, f32)> =
+            std::collections::HashMap::new();
+
+        let insert =
+            |map: &mut std::collections::HashMap<String, (Url, f32)>, url: Url, confidence: f32| {
+                let key = url.as_str().to_string();
+                let entry = map.entry(key).or_insert((url.clone(), confidence));
+                if confidence > entry.1 {
+                    *entry = (url, confidence);
+                }
+            };
 
         // Standard pattern matching
-        for pattern in &self.patterns {
+        for (pattern, &confidence) in self.patterns.iter().zip(JS_URL_PATTERN_CONFIDENCE.iter()) {
             for cap in pattern.captures_iter(js_content) {
                 // Extract URL from all capture groups (most patterns have 1-2 groups)
                 // Group 0 is the full match, groups 1+ are captured values
@@ -93,24 +169,26 @@ impl JavaScriptParser {
 
                         // Try to resolve as absolute or relative URL
                         if let Ok(url) = self.normalize_and_resolve(url_str, base_url) {
-                            endpoints.insert(url);
+                            insert(&mut endpoint_confidence, url, confidence);
                         }
                     }
                 }
             }
         }
 
-        // Detect frameworks and apply framework-specific patterns
+        // Detect frameworks and apply framework-specific patterns (confidence 0.85)
         let frameworks = detect_framework(js_content);
         for framework in &frameworks {
             if let Some(framework_endpoints) =
                 self.extract_framework_endpoints(js_content, base_url, framework)
             {
-                endpoints.extend(framework_endpoints);
+                for url in framework_endpoints {
+                    insert(&mut endpoint_confidence, url, 0.85);
+                }
             }
         }
 
-        endpoints.into_iter().collect()
+        endpoint_confidence.into_values().collect()
     }
 
     /// Extract endpoints using framework-specific patterns

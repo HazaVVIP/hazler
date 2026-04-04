@@ -104,8 +104,11 @@ jobs:
         run: |
           if [[ -n "${{ github.event.inputs.version }}" ]]; then
             echo "tag_name=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "::error::Cannot create a release: workflow was not triggered from a tag and no version input was provided."
+            exit 1
           fi
 
       - name: Detect prerelease

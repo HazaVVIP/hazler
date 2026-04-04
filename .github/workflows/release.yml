@@ -19,6 +19,9 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   create-release:
     name: Create Release
@@ -26,7 +29,11 @@ jobs:
     outputs:
       prerelease: ${{ steps.check_prerelease.outputs.prerelease }}
       version: ${{ steps.get_version.outputs.version }}
+      tag_name: ${{ steps.get_tag.outputs.tag_name }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Get version from tag or input
         id: get_version
         run: |
@@ -36,6 +43,15 @@ jobs:
             echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           else
             echo "version=0.0.0-dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Resolve tag name
+        id: get_tag
+        run: |
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            echo "tag_name=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag_name=${{ github.ref }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Detect prerelease
@@ -53,6 +69,14 @@ jobs:
             fi
           fi
 
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_tag.outputs.tag_name }}
+          name: v${{ steps.get_version.outputs.version }}
+          prerelease: ${{ steps.check_prerelease.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+
   build:
     name: Build for ${{ matrix.target }}
     needs: create-release
@@ -65,30 +89,35 @@ jobs:
             os: ubuntu-latest
             binary_name: hazler
             asset_name: hazler-linux-x86_64
+            use_cross: false
 
-          # Linux aarch64
+          # Linux aarch64 — uses `cross` to handle OpenSSL cross-compilation
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             binary_name: hazler
             asset_name: hazler-linux-aarch64
+            use_cross: true
 
           # macOS x86_64
           - target: x86_64-apple-darwin
             os: macos-latest
             binary_name: hazler
             asset_name: hazler-macos-x86_64
+            use_cross: false
 
           # macOS aarch64 (Apple Silicon)
           - target: aarch64-apple-darwin
             os: macos-latest
             binary_name: hazler
             asset_name: hazler-macos-aarch64
+            use_cross: false
 
           # Windows x86_64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             binary_name: hazler.exe
             asset_name: hazler-windows-x86_64
+            use_cross: false
 
     steps:
       - name: Checkout code
@@ -99,16 +128,35 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools (Linux aarch64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build release binary
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build release binary (cross)
+        if: matrix.use_cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build release binary (cargo)
+        if: '!matrix.use_cross'
         run: cargo build --release --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Create archive (Unix)
         if: matrix.os != 'windows-latest'
@@ -130,8 +178,7 @@ jobs:
         if: matrix.os != 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || github.ref }}
-          name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || '' }}
+          tag_name: ${{ needs.create-release.outputs.tag_name }}
           prerelease: ${{ needs.create-release.outputs.prerelease == 'true' }}
           files: |
             ${{ matrix.asset_name }}.tar.gz
@@ -141,8 +188,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || github.ref }}
-          name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || '' }}
+          tag_name: ${{ needs.create-release.outputs.tag_name }}
           prerelease: ${{ needs.create-release.outputs.prerelease == 'true' }}
           files: |
             ${{ matrix.asset_name }}.zip
@@ -151,7 +197,7 @@ jobs:
 
   docker:
     name: Build and Push Docker Image
-    needs: create-release
+    needs: [create-release, build]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

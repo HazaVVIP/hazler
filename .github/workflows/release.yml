@@ -176,7 +176,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ needs.create-release.outputs.prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ needs.create-release.outputs.prerelease != 'true' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5

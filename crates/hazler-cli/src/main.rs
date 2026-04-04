@@ -1015,8 +1015,7 @@ async fn main() {
     config = config.parse_source_maps(!args.no_source_maps);
 
     // Apply JS confidence threshold
-    let js_confidence = args.js_confidence.clamp(0.0, 1.0);
-    config = config.js_confidence_threshold(js_confidence);
+    config = config.js_confidence_threshold(args.js_confidence);
 
     // quiet_mode is kept for API compatibility but the channel replaces its
     // old println! behaviour; no need to set it here.
@@ -1037,7 +1036,10 @@ async fn main() {
     // Spawn the display task that consumes verified endpoints and prints them.
     let display_handle: tokio::task::JoinHandle<()> = tokio::spawn(async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1));
-        // Consume the first (immediate) tick so the interval starts cleanly.
+        // Consume the first tick: tokio intervals fire *immediately* upon
+        // creation (at t=0).  Discarding it here ensures the first visible
+        // progress update is emitted after a real 1-second delay, aligning
+        // subsequent ticks to 1-second boundaries from the crawl start.
         ticker.tick().await;
 
         loop {

@@ -108,6 +108,13 @@ pub struct JavaScriptParser {
 impl JavaScriptParser {
     /// Create a new JavaScript parser
     pub fn new() -> Result<Self> {
+        // Verify that the confidence array stays in sync with the pattern array.
+        debug_assert_eq!(
+            JS_URL_PATTERNS.len(),
+            JS_URL_PATTERN_CONFIDENCE.len(),
+            "JS_URL_PATTERNS and JS_URL_PATTERN_CONFIDENCE must have the same length"
+        );
+
         let patterns = JS_URL_PATTERNS
             .iter()
             .map(|p| Regex::new(p))

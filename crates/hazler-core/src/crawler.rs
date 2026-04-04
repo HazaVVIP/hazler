@@ -302,7 +302,13 @@ impl Crawler {
                                 let should_send = {
                                     match self.emitted_urls.lock() {
                                         Ok(mut set) => set.insert(canonical),
-                                        Err(_) => false,
+                                        Err(e) => {
+                                            debug!(
+                                                "emitted_urls mutex poisoned, skipping dedup: {}",
+                                                e
+                                            );
+                                            false
+                                        }
                                     }
                                 };
                                 if should_send {
@@ -403,7 +409,7 @@ impl Crawler {
     ///
     /// A page is considered valid when **all** of the following hold:
     /// 1. The HTTP status code is in the 2xx range.
-    /// 2. The response body is longer than `MIN_BODY_LEN` bytes (very short
+    /// 2. The response body is longer than `MIN_VALID_BODY_LEN` bytes (very short
     ///    responses are almost always empty error stubs).
     /// 3. The response body does not begin with soft-error keywords (custom
     ///    error pages that return HTTP 200).
@@ -418,8 +424,8 @@ impl Crawler {
         }
 
         // Very short responses are almost always error stubs.
-        const MIN_BODY_LEN: usize = 64;
-        if page.body.len() < MIN_BODY_LEN {
+        const MIN_VALID_BODY_LEN: usize = 64;
+        if page.body.len() < MIN_VALID_BODY_LEN {
             // Exception: API JSON endpoints can legitimately return small
             // bodies (e.g. `{}` or `{"ok":true}`).  Allow short bodies when
             // the content-type indicates JSON or a non-HTML data format.
@@ -498,8 +504,9 @@ impl Crawler {
             || lower.contains("bad request")
             || lower.contains("no results found")
             // ── Nginx / Apache default error pages ───────────────────────────
-            || (lower.contains("<title>") && lower.contains("nginx") && lower.contains("error"))
-            || (lower.contains("<title>") && lower.contains("apache") && lower.contains("error"))
+            || (lower.contains("<title>")
+                && lower.contains("error")
+                && (lower.contains("nginx") || lower.contains("apache")))
             // ── Cloudflare error indicators ──────────────────────────────────
             || lower.contains("cf-error-code")
             || lower.contains("cf_chl_opt")

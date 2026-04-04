@@ -1,0 +1,9 @@
+[advisories]
+ignore = [
+    # fxhash is unmaintained (transitive dep via scraper -> selectors)
+    # No patched version available; not a security vulnerability
+    "RUSTSEC-2025-0057",
+    # number_prefix is unmaintained (transitive dep via indicatif)
+    # No patched version available; not a security vulnerability
+    "RUSTSEC-2025-0119",
+]

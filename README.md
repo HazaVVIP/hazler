@@ -1,1228 +1,206 @@
-# Hazler - Next-Generation Intelligent Web Crawler
+<div align="center">
+
+# Hazler
+
+**Next-generation web crawler for security reconnaissance.**  
+Built in Rust — fast, stealthy, and operator-friendly.
 
 [![CI](https://github.com/HazaVVIP/hazler/actions/workflows/ci.yml/badge.svg)](https://github.com/HazaVVIP/hazler/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/HazaVVIP/hazler)](https://github.com/HazaVVIP/hazler/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/HazaVVIP/hazler?include_prereleases)](https://github.com/HazaVVIP/hazler/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A fast, efficient, and human-friendly web crawler built in Rust with built-in security features.
+</div>
 
-## 🆕 What's New in v0.2.0
-
-| Feature | Flag |
-|---------|------|
-| **Headless browser** — crawl SPAs (React, Vue, Angular) via CDP | `--browser` |
-| **Smart fuzzing** — URL mutations, parameter discovery, BOLA/IDOR detection | `--fuzz` |
-| **Response diffing** — SimHash, K-means/DBSCAN clustering, baseline comparison | `--baseline` / `--compare` |
-| **Authentication framework** — Basic, Bearer, Cookie, Header, OAuth2, API Key, form login | `--auth` / `--auth-file` |
-| **GraphQL introspection** — Schema extraction from detected endpoints | `--graphql-introspect` |
-| **Source map parsing** — Reveal original source paths (admin panels, API routes) | enabled by default |
-| **HTML/PDF/SQLite export** — Professional reports and queryable database | `--export TYPE:FILE` |
-| **Webhook notifications** — Post results to Slack, Discord, or a generic endpoint | `--webhook URL` |
-| **State persistence & resume** — Save and resume interrupted crawls | `--auto-save` / `--resume` |
-| **Circuit breaker & rate limiting** — Resilient crawling with adaptive backoff | `--circuit-breaker` |
-
-See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
-
-## ✨ Key Features
-
-- ✅ **Clean Output by Default** - Shows only successful URLs (200 status) for easy reading and processing
-- ✅ **Interactive Wizard Mode** - Perfect for beginners to set up crawling step by step
-- ✅ **Smart Noise Filtering** - Automatically filters false positives from WAF blocks and modified 404 pages
-- ✅ **Stealth Mode** - WAF evasion enabled by default for better success rates
-- ✅ **Secret Scanning** - Automatic detection of API keys, tokens, and credentials (enabled by default)
-- ✅ **Headless Browser Support** - Crawl modern SPAs (React, Vue, Angular) with JavaScript execution
-- ✅ **GraphQL Intelligence** - Automatic detection and schema extraction from GraphQL endpoints
-- ✅ **Source Map Parser** - Reveals original source code structure from source maps, exposing admin panels and sensitive paths
-- ✅ HTTP-only crawling with concurrent request handling
-- ✅ HTML parsing and link extraction
-- ✅ **JavaScript endpoint discovery** with regex-based extraction
-- ✅ **Advanced URL normalization** for better endpoint discovery
-- ✅ **Aggressive discovery mode** for security reconnaissance
-- ✅ **.frame file support** for endpoint extraction
-- ✅ Scope validation (stays within domain)
-- ✅ Depth control and multiple output formats
-- ✅ Command-line interface with flexible options
-
-## Prerequisites
-
-Before installing Hazler, ensure you have the following dependencies installed:
-
-### Ubuntu/Debian
-
-```bash
-sudo apt update && sudo apt install -y build-essential pkg-config libssl-dev
-```
-
-### Fedora/RHEL/CentOS
-
-```bash
-sudo dnf install -y gcc pkg-config openssl-devel
-```
-
-### macOS
-
-```bash
-# OpenSSL is typically pre-installed
-# If needed, install via Homebrew:
-brew install openssl@3
-```
-
-### Windows
-
-1. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
-2. Install OpenSSL from [Win32OpenSSL](https://slproweb.com/products/Win32OpenSSL.html)
-
-### Rust
-
-Hazler requires Rust 1.70 or later. Install Rust via [rustup](https://rustup.rs/):
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-Verify installation:
-
-```bash
-rustc --version
-cargo --version
-```
+---
 
 ## Installation
 
-### Quick Install (Recommended)
+### Pre-built Binaries *(recommended — no Rust required)*
 
-Use the automated installation script:
+Download the latest release from the **[Releases page](https://github.com/HazaVVIP/hazler/releases)**.
+
+| Platform | Archive |
+|----------|---------|
+| Linux x86_64 | `hazler-linux-x86_64.tar.gz` |
+| Linux ARM64 | `hazler-linux-aarch64.tar.gz` |
+| macOS Intel | `hazler-macos-x86_64.tar.gz` |
+| macOS Apple Silicon | `hazler-macos-aarch64.tar.gz` |
+| Windows x86_64 | `hazler-windows-x86_64.zip` |
+
+```bash
+# Linux / macOS
+tar xzf hazler-*.tar.gz
+sudo mv hazler /usr/local/bin/
+hazler --version
+```
+
+> Pre-releases (alpha/rc) are also available on the Releases page for early access.
+
+### One-line Installer
 
 ```bash
 curl -sSf https://raw.githubusercontent.com/HazaVVIP/hazler/main/install.sh | bash
 ```
 
-Or download and run manually:
-
-```bash
-wget https://raw.githubusercontent.com/HazaVVIP/hazler/main/install.sh
-chmod +x install.sh
-./install.sh
-```
-
-### Download Pre-built Binaries
-
-Download the latest release for your platform from the [releases page](https://github.com/HazaVVIP/hazler/releases):
-
-- **Linux (x86_64):** `hazler-linux-x86_64.tar.gz`
-- **Linux (aarch64):** `hazler-linux-aarch64.tar.gz`
-- **macOS (Intel):** `hazler-macos-x86_64.tar.gz`
-- **macOS (Apple Silicon):** `hazler-macos-aarch64.tar.gz`
-- **Windows:** `hazler-windows-x86_64.exe.zip`
-
-Extract and verify:
-
-```bash
-# Linux/macOS
-tar xzf hazler-*.tar.gz
-./hazler --version
-
-# Optionally, move to system path
-sudo mv hazler /usr/local/bin/
-```
-
 ### Docker
 
-Run Hazler in a Docker container:
-
 ```bash
-# Pull the image
 docker pull ghcr.io/hazavvip/hazler:latest
-
-# Run a crawl
 docker run --rm ghcr.io/hazavvip/hazler:latest https://example.com
-
-# Save output to file
-docker run --rm ghcr.io/hazavvip/hazler:latest https://example.com > results.jsonl
-
-# With custom options
-docker run --rm ghcr.io/hazavvip/hazler:latest https://example.com -d 2 -c 5 -o json
 ```
 
 ### Build from Source
 
 ```bash
-# Clone the repository
 git clone https://github.com/HazaVVIP/hazler.git
 cd hazler
-
-# Build in release mode
 cargo build --release
-
-# The binary will be located at target/release/hazler
-# Optionally, install to system path
-cargo install --path crates/hazler-cli
+# binary → target/release/hazler
 ```
 
-### Verify Installation
-
-```bash
-hazler --version
-```
+---
 
 ## Quick Start
 
-### For Beginners: Interactive Wizard Mode
+```bash
+# Basic crawl — prints verified URLs in real time
+hazler https://example.com
 
-If you're new to Hazler, start with the interactive wizard:
+# Full security scan (secrets, JS endpoints, GraphQL, source maps)
+hazler https://example.com --all
+
+# Crawl a React/Vue/Angular SPA
+hazler https://app.example.com --browser
+
+# Fuzz for hidden endpoints
+hazler https://example.com --fuzz --fuzz-level aggressive
+
+# Resume an interrupted crawl
+hazler https://example.com --auto-save 30
+hazler https://example.com --resume hazler-state.json
+
+# Export reports
+hazler https://example.com --export html:report.html --export sqlite:crawl.db
+```
+
+### Interactive Wizard *(great for first-time users)*
 
 ```bash
 hazler --wizard
 ```
 
-The wizard will guide you through:
-- Entering the target URL
-- Setting crawl depth (how deep to go)
-- Choosing maximum pages to crawl
-- Enabling/disabling secret scanning
-- Selecting output format
+---
 
-Perfect for first-time users!
+## Features
 
-### Your First Crawl
+| Category | Capabilities |
+|----------|-------------|
+| **Crawling** | Concurrent HTTP, BFS depth control, scope validation (domain / subdomain) |
+| **Stealth** | WAF evasion, user-agent rotation, Chrome client hints, adaptive timing |
+| **Discovery** | JS endpoint extraction, source map parsing, GraphQL introspection, `.frame` files |
+| **Secret Scanning** | 38+ patterns — AWS keys, tokens, private keys, DB strings (Critical → Low) |
+| **Headless Browser** | Chrome/CDP via `--browser`; captures SPA routes, XHR calls, screenshots |
+| **Fuzzing** | URL mutations, parameter discovery, BOLA/IDOR detection (`hazler-fuzzer`) |
+| **Auth** | Basic, Bearer, Cookie, Header, API Key, OAuth2, form login (`--auth` / `--auth-file`) |
+| **Diffing** | SimHash, K-means/DBSCAN clustering, baseline comparison (`--baseline`, `--compare`) |
+| **Persistence** | JSON & SQLite state; resume interrupted crawls (`--resume`, `--auto-save`) |
+| **Export** | HTML report, PDF, SQLite, OpenAPI, Postman, Nuclei, ffuf, Burp Suite |
+| **Webhooks** | Slack, Discord, generic HTTP (`--webhook`) |
+| **Rate Control** | Per-domain token-bucket, adaptive 429 detection, circuit breaker |
 
-Start with a simple crawl of a website:
+---
 
-```bash
-hazler https://example.com
+## Common Flags
+
 ```
-
-This will crawl `example.com` with:
-- **Clean output showing only successful URLs (200 status)** - Perfect for piping to other tools
-- **Smart noise filtering** - Automatically removes false positives from WAF blocks and modified 404 pages
-- **Stealth mode enabled** for better success rates and WAF evasion
-- **Secret scanning enabled** to detect sensitive data leaks
-- Default depth of 3 and concurrency of 10
-
-The output will show clean URLs like:
-```
-https://example.com/
-https://example.com/about
-https://example.com/contact
-https://example.com/api/users
-```
-
-### Want Detailed Output?
-
-Use `--full-output` to see the beautiful tree view with statistics:
-
-```bash
-hazler https://example.com --full-output
-```
-
-This shows:
-```
-🌐 HAZLER CRAWL RESULTS
-✓ [200] https://example.com/ (15 links)
-  ✓ [200] https://example.com/about (5 links)
-  ✓ [200] https://example.com/contact (3 links)
-```
-
-### Common Use Cases
-
-#### Comprehensive Security Scan (Recommended)
-Perform a full security reconnaissance with all features enabled:
-```bash
-hazler https://yoursite.com --all
-```
-
-This activates:
-- Deep crawling (depth 5)
-- Aggressive endpoint discovery
-- Secret and credential detection
-- Framework detection (React, Angular, Vue, etc.)
-- API endpoint mapping
-- Comprehensive security report
-
-#### Site Audit with Statistics
-Crawl your entire site and get detailed statistics:
-```bash
-hazler https://yoursite.com -d 5 -p 1000 --stats
-```
-
-#### Security Audit with HTML Report
-Perform a comprehensive security audit and generate an HTML report:
-```bash
-hazler https://yoursite.com --all --html-report report.html
-```
-
-#### Quick Link Check
-Check links on a specific page (depth 1):
-```bash
-hazler https://yoursite.com -d 1 -c 5
-```
-
-#### Large Site Crawl with JSON Output
-Crawl a large site and save machine-readable output:
-```bash
-hazler https://example.com -d 4 -c 20 -p 5000 -o json > results.json
-```
-
-#### Disable Stealth/Secrets for Speed
-If you need faster crawling and don't need stealth or secret scanning:
-```bash
-hazler https://example.com --no-stealth --no-secrets
-```
-
-#### Crawl JavaScript-Heavy Sites (SPAs)
-For modern single-page applications that require JavaScript execution:
-```bash
-hazler https://react-app.com --browser
-```
-
-This enables the headless browser to:
-- Execute JavaScript and render dynamic content
-- Capture API calls made by the application
-- Discover hidden endpoints loaded via JavaScript
-- Extract content from React, Vue, Angular, and other SPAs
-
-Advanced browser options:
-```bash
-# With screenshots
-hazler https://app.com --browser --screenshot-path ./screenshots/
-
-# Faster crawling (disable images)
-hazler https://app.com --browser --disable-images
-```
-
-## Usage
-
-### Basic usage
-
-Crawl a website:
-
-```bash
-hazler https://example.com
-```
-
-### Advanced options
-
-```bash
 hazler [OPTIONS] <URL>
 
-Arguments:
-  <URL>  Target URL to crawl
-
-Options:
-  -d, --max-depth <MAX_DEPTH>          Maximum crawl depth [default: 3]
-  -c, --concurrency <CONCURRENCY>      Number of concurrent requests [default: 10]
-  -p, --max-pages <MAX_PAGES>          Maximum number of pages to crawl (0 = unlimited) [default: 0]
-  -u, --user-agent <USER_AGENT>        Custom user agent string [default: Hazler/0.1.0]
-  -t, --timeout <TIMEOUT>              Request timeout in seconds [default: 10]
-  -o, --output-format <OUTPUT_FORMAT>  Output format (json, jsonl, urls, csv, tree, nuclei, ffuf, or burp) [default: urls]
-      --include-body                   Include response body in output (excluded by default)
-      --fields <FIELDS>                Select specific fields to output (comma-separated)
-      --aggressive                     Enable aggressive endpoint discovery mode
-      --all                            Enable comprehensive scanning mode (deep crawl + secrets + framework detection)
-      --stats                          Show crawl statistics with distributions
-      --report                         Generate comprehensive summary report
-      --html-report <FILE>             Generate HTML report and save to file
-      --no-stealth                     Disable stealth mode (enabled by default)
-      --no-secrets                     Disable secret scanning (enabled by default)
-      --proxy <PROXY>                  Proxy URL (e.g., socks5://localhost:1080, http://proxy:8080)
-      --strict-domain                  Only crawl the exact domain (no subdomains)
-      --subs                           Allow crawling subdomains
-      --browser                        Enable headless browser for JavaScript-heavy sites (SPAs)
-      --screenshot-path <PATH>         Save screenshots when using browser
-      --disable-images                 Disable images in browser for faster loading
-  -v, --verbose                        Verbose output (for debugging)
-  -w, --wizard                         Interactive wizard mode - perfect for beginners
-      --full-output                    Show full output with tree view and statistics
-  -h, --help                           Print help
-  -V, --version                        Print version
+  -d, --max-depth <N>          Crawl depth [default: 3]
+  -c, --concurrency <N>        Concurrent requests [default: 10]
+  -p, --max-pages <N>          Page limit (0 = unlimited)
+  -t, --timeout <secs>         Request timeout [default: 10]
+  -o, --output-format <FMT>    clean | json | jsonl | csv | urls | nuclei | ffuf | burp | openapi | postman
+      --all                    Enable all scanning features
+      --aggressive             Deep JS / URL variant discovery
+      --browser                Headless Chrome for SPAs
+      --fuzz                   Smart endpoint fuzzing
+      --graphql-introspect     GraphQL schema extraction
+      --auth <METHOD:VALUE>    Authentication (basic / bearer / apikey / cookie)
+      --export <TYPE:FILE>     Export report (html / pdf / sqlite / openapi / postman)
+      --resume <FILE>          Resume from saved state
+      --auto-save <secs>       Periodic state save interval
+      --no-stealth             Disable WAF evasion
+      --no-secrets             Disable secret scanning
+      --proxy <URL>            Proxy (socks5:// or http://)
+  -w, --wizard                 Interactive setup wizard
+  -v, --verbose                Debug output
 ```
 
-### Examples
+Full reference → [`docs/CLI.md`](docs/CLI.md)
 
-**Interactive wizard mode (perfect for beginners):**
-```bash
-hazler --wizard
-```
-
-**Basic crawl with clean output (default - shows only successful URLs):**
-```bash
-hazler https://example.com
-```
-Output: Clean list of successful URLs, automatically filtered from noise.
-
-**Full detailed output with tree view and statistics:**
-```bash
-hazler https://example.com --full-output
-```
-Shows beautiful tree view with colors, status codes, and complete statistics.
-
-**Comprehensive scan with all features enabled:**
-```bash
-hazler https://example.com --all
-```
-
-**Crawl with custom depth and concurrency:**
-```bash
-hazler https://example.com -d 2 -c 5
-```
-
-**Limit to 100 pages:**
-```bash
-hazler https://example.com -p 100
-```
-
-**Get detailed statistics:**
-```bash
-hazler https://example.com --full-output
-```
-
-Generate comprehensive report with security findings:
-```bash
-hazler https://example.com --report
-```
-
-Generate HTML report:
-```bash
-hazler https://example.com --html-report report.html
-```
-
-Output as single JSON object for processing:
-```bash
-hazler https://example.com -o json > results.json
-```
-
-Output as JSONL (one JSON object per line):
-```bash
-hazler https://example.com -o jsonl > results.jsonl
-```
-
-Output as URL list:
-```bash
-hazler https://example.com -o urls > urls.txt
-```
-
-Output as CSV:
-```bash
-hazler https://example.com -o csv > results.csv
-```
-
-Output as Nuclei JSON format (for vulnerability scanners):
-```bash
-hazler https://example.com -o nuclei > nuclei-results.json
-```
-
-Output as ffuf JSON format (for web fuzzers):
-```bash
-hazler https://example.com -o ffuf > ffuf-results.json
-```
-
-Output as Burp Suite XML (for Burp Suite integration):
-```bash
-hazler https://example.com -o burp > burp-sitemap.xml
-```
-
-Pipeline mode - read URLs from stdin:
-```bash
-cat urls.txt | hazler - -o urls
-echo "https://example.com" | hazler - -o json
-```
-
-Disable stealth and secrets for faster crawling:
-```bash
-hazler https://example.com --no-stealth --no-secrets
-```
-
-Use a proxy for requests:
-```bash
-hazler https://example.com --proxy socks5://localhost:1080
-```
-
-Crawl only the exact domain (no subdomains):
-```bash
-hazler https://example.com --strict-domain
-```
-
-Allow crawling subdomains:
-```bash
-hazler https://example.com --subs
-```
-
-Include body content (excluded by default):
-```bash
-hazler https://example.com --include-body
-```
-
-Select specific fields:
-```bash
-hazler https://example.com --fields url,status_code,depth -o jsonl
-```
-```bash
-hazler https://example.com --report
-```
-
-Verbose logging:
-```bash
-hazler https://example.com -v
-```
-
-**Headless Browser (for JavaScript-heavy sites):**
-
-Crawl a React/Vue/Angular application with JavaScript execution:
-```bash
-hazler https://react-app.com --browser
-```
-
-Crawl with screenshots:
-```bash
-hazler https://spa-app.com --browser --screenshot-path ./screenshots/
-```
-
-Faster browser crawling (disable images):
-```bash
-hazler https://app.com --browser --disable-images
-```
-
-**GraphQL Intelligence:**
-
-Automatically detect and analyze GraphQL endpoints:
-```bash
-# Auto-detect GraphQL endpoints during crawling
-hazler https://api.example.com
-
-# Enable introspection queries for schema extraction
-hazler https://api.example.com --graphql-introspect
-```
-
-**Source Map Analysis:**
-
-Automatically parse source maps to reveal original source structure (enabled by default):
-```bash
-# Source map parsing enabled by default
-hazler https://app.com
-
-# Disable source map parsing if not needed
-hazler https://app.com --no-source-maps
-```
-
-Source map analysis reveals:
-- Original file paths and project structure
-- Admin panel routes and internal components
-- API endpoint definitions
-- Authentication logic paths
-- Configuration files
-- Framework detection
-
-## Security Reconnaissance Features
-
-Hazler has been enhanced with powerful security reconnaissance capabilities for bug hunting and penetration testing:
-
-### Secret & Credential Detection
-
-Hazler automatically scans all crawled content for sensitive information (enabled by default):
-
-```bash
-# Crawl with secret detection (default)
-hazler https://target.com
-
-# View secrets in comprehensive report
-hazler https://target.com --report
-```
-
-**Detects 38+ types of secrets including:**
-
-**Critical Severity:**
-- AWS Access Keys and Secret Keys
-- GitHub Personal Access Tokens and OAuth Tokens
-- Stripe Live Secret Keys
-- Google Cloud Service Account credentials
-- Private Keys (RSA, SSH, PGP, DSA)
-- Database connection strings
-
-**High Severity:**
-- Generic API keys and tokens
-- Slack tokens and webhooks
-- Azure Storage keys
-- SendGrid and Mailgun API keys
-- Google API Keys
-- JWT tokens
-
-**Medium Severity:**
-- Internal IP addresses (10.x.x.x, 192.168.x.x, 172.16.x.x)
-- OAuth Client IDs and Secrets
-- NPM and PyPI tokens
-
-**Low Severity:**
-- Email addresses
-- Configuration file references (.env, config.json)
-
-Secrets are automatically redacted in output and classified by severity to help prioritize remediation.
-
-### JavaScript Endpoint Discovery
-
-Hazler automatically extracts endpoints from JavaScript files using advanced regex patterns:
-
-```bash
-# Crawl and extract JavaScript endpoints
-hazler https://target.com --aggressive
-```
-
-Supports extraction from:
-- **Fetch API calls**: `fetch('/api/users')`
-- **XMLHttpRequest**: `.open('GET', '/api/data')`
-- **Axios**: `axios.get('/api/posts')`
-- **jQuery AJAX**: `$.ajax({url: '/api/items'})`
-- **API definitions**: `const endpoint = '/api/v1/users'`
-- **Template literals**: `` `/api/${userId}` ``
-- **Router configs**: `path: '/admin/dashboard'`
-- **GraphQL endpoints**: `graphql: '/graphql'`
-- **WebSocket endpoints**: `wss://example.com/socket`
-
-### Framework Detection
-
-Hazler detects modern web frameworks to apply specialized extraction patterns:
-
-**Supported Frameworks:**
-- React (including React Router)
-- Angular (including routing)
-- Vue.js (including Vue Router)
-- Next.js (including API routes)
-- Nuxt
-- Svelte
-- Ember
-- Backbone
-
-### Aggressive Discovery Mode
-
-Enable comprehensive endpoint discovery with the `--aggressive` flag:
-
-```bash
-hazler https://target.com --aggressive -d 3
-```
-
-In aggressive mode, Hazler:
-- ✅ Applies regex patterns to JavaScript embedded in HTML
-- ✅ Generates URL variations (with/without trailing slashes)
-- ✅ Tests common file extensions (.json, .xml, .html, .txt)
-- ✅ Discovers API version variants (v1, v2, v3)
-- ✅ Tests different format parameters (?format=json, ?format=xml)
-- ✅ Extracts endpoints from .frame files
-
-### Advanced URL Normalization
-
-Hazler uses intelligent URL normalization to:
-- Remove duplicate URLs with different query parameter orders
-- Canonicalize URLs for proper deduplication
-- Generate endpoint variations for thorough testing
-- Handle template variables in URLs (`${id}` → `0`, `{userId}` → `1`)
-
-### Example: Security Audit
-
-Perform a comprehensive security audit of a target:
-
-```bash
-# Deep crawl with aggressive discovery
-hazler https://target.com \
-  --aggressive \
-  -d 5 \
-  -c 20 \
-  -p 10000 \
-  --fields url,status_code,content_type \
-  > endpoints.jsonl
-
-# Extract just the URLs for further testing
-hazler https://target.com --aggressive -o urls > urls.txt
-```
-
-### Example: Find API Endpoints
-
-Discover hidden API endpoints:
-
-```bash
-# Focus on API discovery
-hazler https://api.target.com --aggressive --fields url,links -o json | \
-  jq '.pages[] | select(.url | contains("api")) | .url'
-```
-
-## Output Formats
-
-Hazler supports multiple output formats to suit different use cases:
-
-### Tree (default)
-Human-friendly tree structure with colors showing site hierarchy:
-```
-🌐 HAZLER CRAWL RESULTS
-════════════════════════════════════════════════════════════════════════════════
-
-✓ [200] https://example.com/ (10 links)
-  ✓ [200] https://example.com/page1 (5 links)
-    ✓ [200] https://example.com/page1/sub (2 links)
-  ✓ [200] https://example.com/page2 (3 links)
-  ↻ [301] https://example.com/old (0 links)
-  ✗ [404] https://example.com/missing (0 links)
-
-════════════════════════════════════════════════════════════════════════════════
-```
-
-Features:
-- ✓ Color-coded status indicators (green=success, yellow=redirect, red=error)
-- Shows link count for each page
-- Displays secrets found (if any)
-- Visual hierarchy based on crawl depth
-
-### JSONL
-Each line is a JSON object representing a crawled page:
-```json
-{"url":"https://example.com/","status_code":200,"body":"...","headers":{...},"content_type":"text/html","links":[...],"depth":0}
-{"url":"https://example.com/page1","status_code":200,"body":"...","headers":{...},"content_type":"text/html","links":[...],"depth":1}
-```
-
-### JSON
-Single JSON object with all results:
-```json
-{
-  "pages": [...],
-  "total_pages": 10,
-  "total_urls": 25,
-  "errors": [],
-  "secret_findings": {
-    "total": 5,
-    "critical": 2,
-    "high": 1,
-    "medium": 2,
-    "low": 0
-  }
-}
-```
-
-### URLs
-Simple list of URLs (one per line):
-```
-https://example.com/
-https://example.com/page1
-https://example.com/page2
-```
-
-### CSV
-Comma-separated values with headers:
-```csv
-url,status_code,depth,content_type,num_links
-"https://example.com/",200,0,"text/html",10
-"https://example.com/page1",200,1,"text/html",5
-```
-
-### Nuclei
-Nuclei JSON format for vulnerability scanner integration (JSON Lines):
-```json
-{"template-id":"hazler-crawl-result","info":{"name":"Web Crawl Result","severity":"info","tags":["hazler","crawl"]},"type":"http","host":"https://example.com","matched-at":"https://example.com/","extracted-results":[],"timestamp":"2026-02-15T00:00:00Z","matcher-status":true,"metadata":{"status_code":200,"depth":0,"content_type":"text/html","num_links":10}}
-```
-
-Usage:
-```bash
-hazler https://example.com -o nuclei > nuclei-results.json
-nuclei -l nuclei-results.json -t templates/
-```
-
-### ffuf
-ffuf JSON format for web fuzzer integration (JSON Lines):
-```json
-{"input":{"URL":"https://example.com/"},"position":1,"status":200,"length":1234,"words":100,"lines":50,"content-type":"text/html","redirectlocation":"","url":"https://example.com/","resultfile":"","metadata":{"depth":0,"num_links":10,"secrets_found":0}}
-```
-
-Usage:
-```bash
-hazler https://example.com -o ffuf > ffuf-results.json
-# Process with ffuf filters or custom scripts
-```
-
-### Burp Suite XML
-Burp Suite XML sitemap format for importing into Burp Suite:
-```xml
-<?xml version="1.0"?>
-<!DOCTYPE items [...]>
-<items burpVersion="Hazler-0.1.0">
-  <item>
-    <time>Sun Feb 15 00:00:00 UTC 2026</time>
-    <url>https://example.com/</url>
-    <host>example.com</host>
-    <port>443</port>
-    <protocol>https</protocol>
-    <method>GET</method>
-    <path>/</path>
-    <request base64="true">...</request>
-    <status>200</status>
-    <responselength>1234</responselength>
-    <mimetype>HTML</mimetype>
-    <response base64="true">...</response>
-  </item>
-</items>
-```
-
-Usage:
-```bash
-hazler https://example.com -o burp > sitemap.xml
-# Import into Burp Suite: Target → Site map → Import
-```
+---
 
 ## Pipeline Mode
 
-Hazler supports pipeline mode for processing multiple URLs from stdin, enabling seamless integration with other tools:
-
-### Basic Pipeline Usage
-
-Read URLs from a file:
 ```bash
-cat urls.txt | hazler - -o urls
+# Read targets from stdin
+cat targets.txt | hazler - -o urls
+
+# Bug bounty pipeline
+subfinder -d target.com | httpx -silent | hazler - --all -o nuclei | nuclei -t templates/
 ```
 
-Chain with other tools:
-```bash
-echo "https://example.com" | hazler - -o json | jq '.pages[].url'
-```
+---
 
-Process subdomain enumeration results:
-```bash
-subfinder -d example.com | httpx -silent | hazler - -o nuclei > results.json
-```
+## Output Formats
 
-### Pipeline Examples
+| Format | Description |
+|--------|-------------|
+| `clean` *(default)* | Live stream of verified 200-range URLs |
+| `json` / `jsonl` | Structured data for scripting / jq |
+| `urls` | Plain URL list |
+| `nuclei` / `ffuf` / `burp` | Direct tool integration |
+| `openapi` / `postman` | API spec export |
+| `--export html:FILE` | Interactive HTML report |
+| `--export pdf:FILE` | PDF report |
+| `--export sqlite:FILE` | Queryable database |
 
-Crawl multiple targets and extract endpoints:
-```bash
-cat targets.txt | hazler - -d 2 -o urls > all-endpoints.txt
-```
+---
 
-Find secrets across multiple sites:
-```bash
-cat sites.txt | hazler - --all -o json | jq '.pages[] | select(.secrets | length > 0)'
-```
+## Architecture
 
-Integration with bug bounty workflows:
-```bash
-# Enumerate subdomains → Check live hosts → Crawl → Extract parameters
-subfinder -d target.com | \
-  httpx -silent -status-code -title | \
-  cut -d' ' -f1 | \
-  hazler - --aggressive -o urls | \
-  grep "?" > params.txt
-```
-
-### URL File Format
-
-When using pipeline mode with a file, you can:
-- Include comments by starting lines with `#`
-- Have empty lines (they will be skipped)
-- List one URL per line
-
-Example `urls.txt`:
-```
-# Production targets
-https://example.com
-https://api.example.com
-
-# Staging environment
-https://staging.example.com
-
-# Skip this one
-# https://old.example.com
-```
-
-Usage:
-```bash
-cat urls.txt | hazler - -o urls
-```
-
-## Output Processing Examples
-
-### Using with jq
-
-Extract URLs and status codes:
-```bash
-hazler https://yoursite.com -o json | jq -r '.pages[] | "\(.url) → \(.status_code)"'
-```
-
-Find all 404 errors:
-```bash
-hazler https://yoursite.com -o json | jq '.pages[] | select(.status_code == 404) | .url'
-```
-
-Create a simple sitemap:
-```bash
-hazler https://yoursite.com -o json | jq -r '.pages[].url' | sort > sitemap.txt
-```
-
-Count pages by depth:
-```bash
-hazler https://yoursite.com -o json | jq '.pages | group_by(.depth) | map({depth: .[0].depth, count: length})'
-```
-
-## Troubleshooting
-
-### Build Errors
-
-#### OpenSSL Not Found
-
-**Error:**
-```
-error: failed to run custom build command for `openssl-sys v0.9.x`
-Could not find directory of OpenSSL installation
-```
-
-**Solution:**
-Install OpenSSL development libraries:
-- **Ubuntu/Debian:** `sudo apt install -y pkg-config libssl-dev`
-- **Fedora/RHEL:** `sudo dnf install -y pkg-config openssl-devel`
-- **macOS:** `brew install openssl@3` (if not already installed)
-- **Windows:** Install from [Win32OpenSSL](https://slproweb.com/products/Win32OpenSSL.html)
-
-#### pkg-config Not Found
-
-**Error:**
-```
-error: failed to run custom build command for `openssl-sys v0.9.x`
-Perhaps you need to install pkg-config?
-```
-
-**Solution:**
-- **Ubuntu/Debian:** `sudo apt install -y pkg-config`
-- **Fedora/RHEL:** `sudo dnf install -y pkg-config`
-- **macOS:** `brew install pkg-config`
-
-#### Rust Version Too Old
-
-**Error:**
-```
-error: package requires rustc 1.70 or newer
-```
-
-**Solution:**
-Update Rust to the latest version:
-```bash
-rustup update stable
-```
-
-### Runtime Issues
-
-#### Command Not Found
-
-**Error:**
-```
-hazler: command not found
-```
-
-**Solution:**
-1. If you built from source, use the full path: `./target/release/hazler`
-2. Or install to system path: `cargo install --path crates/hazler-cli`
-3. Ensure `~/.cargo/bin` is in your PATH:
-   ```bash
-   echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
-   source ~/.bashrc
-   ```
-
-#### Connection Timeouts
-
-If you're experiencing connection timeouts, increase the timeout value:
-```bash
-hazler https://example.com -t 30
-```
-
-#### Memory Issues
-
-For very large crawls, limit the number of pages:
-```bash
-hazler https://example.com -p 10000
-```
-
-Or reduce concurrency:
-```bash
-hazler https://example.com -c 5
-```
-
-### Getting Help
-
-If you encounter issues not covered here:
-
-1. Check [GitHub Issues](https://github.com/HazaVVIP/hazler/issues)
-2. Search existing issues for similar problems
-3. Create a new issue with:
-   - Your OS and version
-   - Rust version (`rustc --version`)
-   - Full error message
-   - Steps to reproduce
-
-## Project Structure
+8 focused Rust crates in a workspace:
 
 ```
-hazler/
-├── Cargo.toml                  # Root workspace manifest
-├── README.md                   # This file
-├── CHANGELOG.md                # Version history
-├── CONTRIBUTING.md             # Contribution guidelines
-├── ROADMAP.md                  # Feature roadmap
-├── SECURITY.md                 # Security policy & responsible disclosure
-├── LICENSE                     # MIT License
-├── rust-toolchain.toml         # Pinned Rust toolchain
-├── install.sh                  # Automated installation script
-├── Dockerfile                  # Docker image configuration
-├── crates/
-│   ├── hazler-core/           # Core crawling engine
-│   ├── hazler-http/           # HTTP client wrapper
-│   ├── hazler-parser/         # HTML parsing
-│   ├── hazler-js-parser/      # JavaScript endpoint extraction
-│   ├── hazler-secrets/        # Secret & credential detection
-│   ├── hazler-browser/        # Headless browser integration (CDP/chromiumoxide)
-│   ├── hazler-fuzzer/         # URL mutation and parameter fuzzing
-│   └── hazler-cli/            # Command-line interface
-├── docs/
-│   ├── CLI.md                  # Full CLI reference
-│   └── ARCHITECTURE.md        # Crate dependency graph and data-flow overview
-└── scripts/
-    └── bpftrace/               # eBPF monitoring scripts
+hazler-core       Core crawler engine, persistence, diffing
+hazler-http       HTTP client, authentication, stealth headers
+hazler-parser     HTML link extraction, GraphQL detection
+hazler-js-parser  JS endpoint & source map extraction
+hazler-secrets    Credential pattern matching
+hazler-browser    Headless Chrome via CDP (chromiumoxide)
+hazler-fuzzer     URL mutation, parameter discovery
+hazler-cli        CLI entry point
 ```
+
+Full diagram → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+
+---
 
 ## Development
 
-### Running tests
-
 ```bash
-cargo test --workspace
+cargo test --workspace          # Run all tests
+cargo fmt --check               # Check formatting
+cargo clippy -- -D warnings     # Lint
+cargo build --release           # Release build
 ```
 
-### Formatting and linting
+---
 
-```bash
-# Check formatting (also enforced in CI)
-cargo fmt --check
+## Legal & Ethics
 
-# Run clippy lints
-cargo clippy -- -D warnings
-```
+Hazler is a security research tool. **Only crawl targets you are authorised to test.**  
+See [SECURITY.md](SECURITY.md) for responsible disclosure and [CONTRIBUTING.md](CONTRIBUTING.md) to contribute.
 
-### Running with debug logs
+MIT License — see [LICENSE](LICENSE).
 
-```bash
-RUST_LOG=debug cargo run -- https://example.com
-```
-
-### eBPF/bpftrace Debugging 🔍
-
-Hazler includes advanced eBPF-based monitoring scripts for deep system-level debugging and performance analysis:
-
-```bash
-# Monitor network activity
-sudo ./scripts/bpftrace/hazler-trace.sh network hazler https://example.com
-
-# Profile performance
-sudo ./scripts/bpftrace/hazler-trace.sh perf hazler https://example.com -d 3
-
-# Security monitoring
-sudo ./scripts/bpftrace/hazler-trace.sh security hazler https://target.com
-
-# HTTP tracing
-sudo ./scripts/bpftrace/hazler-trace.sh http hazler https://api.example.com
-```
-
-**Features:**
-- 🌐 Network connection tracking (TCP, DNS, TLS)
-- ⚡ Performance profiling (CPU, memory, I/O)
-- 🛡️ Security monitoring (suspicious patterns, file access)
-- 📊 HTTP request/response tracing
-- 📈 Real-time statistics and histograms
-
-See [scripts/bpftrace/README.md](scripts/bpftrace/README.md) for detailed documentation.
-
-**Requirements:** Linux with bpftrace installed (`sudo apt install bpftrace`)
-
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for the full roadmap. Summary:
-
-### Phase 1: MVP ✅
-- Basic HTTP crawler ✅
-- HTML parsing ✅
-- Concurrent crawling ✅
-- CLI interface ✅
-- Multiple output formats (JSON, JSONL, CSV, Tree, URLs) ✅
-
-### Phase 2: Security Intelligence ✅
-- **JavaScript endpoint extraction** ✅
-- **Advanced URL normalization** ✅
-- **Aggressive discovery mode** ✅
-- **Framework detection** ✅ (React, Angular, Vue, Next.js, etc.)
-- **Secret scanning** ✅ (38+ patterns for credentials, keys, tokens)
-- **.frame file support** ✅
-- **Regex-based pattern matching** ✅
-- **Template variable replacement** ✅
-- **Comprehensive reporting** ✅
-- **HTML report generation** ✅
-
-### Phase 3: Enhanced Stealth & Scale ✅
-- **Full WAF evasion** ✅ (user-agent rotation, Chrome client hints, adaptive timing)
-- **Advanced rate limiting** ✅ (per-domain token bucket with 429 detection)
-- **Content similarity detection** ✅ (SimHash, K-means/DBSCAN clustering)
-- **Headless browser support** ✅
-- **Smart fuzzing** ✅ (URL mutations, parameter discovery, BOLA/IDOR detection)
-- **Response diffing & baseline comparison** ✅
-- **Retry & circuit breaker** ✅
-- **State persistence & resume** ✅
-- **Authentication framework** ✅
-- **Reporting & export system** ✅ (HTML, PDF, SQLite, OpenAPI, Postman, Nuclei, ffuf, Burp)
-- **Webhook notifications** ✅
-- **GraphQL introspection** ✅
-- **Source map parsing** ✅
-- **eBPF/bpftrace debugging** ✅
-
-### Phase 4: Polish (Planned)
-- robots.txt respect
-- Proxy support (SOCKS5, HTTP)
-- Distributed crawling (Redis)
-- OpenTelemetry integration
-- Real-time dashboard
-- Plugin system for extensibility
-
-## FAQ
-
-### How fast is Hazler?
-
-Hazler can crawl 100+ pages per second with appropriate concurrency settings (e.g., `-c 20`), depending on your network and target server capabilities.
-
-### Does Hazler respect robots.txt?
-
-Not yet. This is planned for a future release. Use responsibly and only crawl sites you have permission to access.
-
-### Can I crawl JavaScript-heavy sites?
-
-Yes! Hazler now includes:
-- JavaScript endpoint discovery that extracts API endpoints from JavaScript code
-- Framework detection (React, Angular, Vue, Next.js, etc.)
-- Specialized extraction patterns for each framework
-
-Use `--aggressive` mode or `--all` mode for the most thorough discovery.
-
-### What is the --all mode?
-
-The `--all` flag enables comprehensive scanning mode, which:
-- Increases crawl depth from 3 to 5 (if using default)
-- Enables aggressive endpoint discovery
-- Activates secret and credential scanning
-- Enables framework detection
-- Provides comprehensive security reporting
-
-This is the recommended mode for security audits and bug bounty reconnaissance.
-
-### What is aggressive mode?
-
-Aggressive mode (`--aggressive` flag) enables comprehensive endpoint discovery by:
-- Extracting endpoints from JavaScript code
-- Generating URL variations (trailing slashes, extensions)
-- Testing API version variants (v1, v2, v3)
-- Parsing .frame files for endpoint definitions
-- Applying framework-specific extraction patterns
-
-This is particularly useful for security reconnaissance and bug hunting.
-
-### What types of secrets can Hazler detect?
-
-Hazler detects 38+ types of secrets including:
-- AWS keys, GitHub tokens, Stripe keys
-- API keys and authentication tokens
-- Private keys (RSA, SSH, PGP)
-- Database connection strings
-- Internal IP addresses and emails
-
-All secrets are classified by severity (Critical, High, Medium, Low) and redacted in output.
-
-### Does Hazler work with .frame files?
-
-Yes! Hazler automatically detects and parses .frame files to extract endpoint definitions.
-
-### How do I limit crawling to specific paths?
-
-Currently, Hazler crawls all pages within the same domain. URL filtering is planned for a future release. As a workaround, you can filter the output with `jq`:
-```bash
-hazler https://example.com -o json | jq '.pages[] | select(.url | contains("/blog/"))'
-```
-
-### Does Hazler store crawl data?
-
-By default, Hazler outputs all data to stdout. You can redirect output to a file:
-```bash
-hazler https://example.com > crawl-results.jsonl
-```
-
-For persistent storage and later querying, use the SQLite export:
-```bash
-hazler https://example.com --export sqlite:crawl.db
-```
-
-You can also enable automatic state saving for resume support:
-```bash
-hazler https://example.com --auto-save 30
-```
-
-### Can I resume an interrupted crawl?
-
-Yes! Use `--auto-save` to periodically save crawl state, and `--resume` to continue from where you left off:
-
-```bash
-# Start a crawl with auto-save every 30 seconds
-hazler https://example.com --auto-save 30
-
-# Resume from a saved state file
-hazler https://example.com --resume hazler-state.json
-
-# Use SQLite backend for the state
-hazler https://example.com --auto-save 30 --persist-sqlite --resume hazler-state.db
-```
-
-### How do I crawl multiple domains?
-
-Currently, Hazler is designed for single-domain crawls. Run multiple instances for different domains:
-```bash
-hazler https://site1.com > site1.jsonl &
-hazler https://site2.com > site2.jsonl &
-wait
-```
-
-## Performance Tips
-
-- **Start small:** Test with `-d 1 -p 10` first
-- **Increase gradually:** Slowly increase `-c` (concurrency) and `-d` (depth)
-- **Monitor resources:** Watch CPU and memory usage
-- **Respect servers:** Don't overwhelm target servers; consider `-c 5` for smaller sites
-- **Use filters:** Process output with `jq` or similar tools to reduce data size
-- **Use aggressive mode wisely:** `--aggressive` generates more requests; use on targets you're authorized to test
-- **Exclude body by default:** Body content is excluded by default for performance; use `--include-body` only when needed
-- **Disable features for speed:** If you don't need stealth or secret scanning, use `--no-stealth --no-secrets` for faster crawling
-- **Use machine-readable formats:** For large crawls, use `-o jsonl` or `-o json` instead of tree format to save on terminal rendering
-
-## New Default Behavior
-
-**Hazler now defaults to human-friendly behavior:**
-- 🎨 **Tree output format** - Beautiful, colored tree view (instead of JSONL)
-- 🕵️ **Stealth mode enabled** - Better success rates with WAF evasion
-- 🔒 **Secret scanning enabled** - Automatic detection of sensitive data leaks
-
-You can disable these features if needed:
-```bash
-# Traditional machine-readable output
-hazler https://example.com -o jsonl
-
-# Disable stealth and secrets for maximum speed
-hazler https://example.com --no-stealth --no-secrets
-```
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Contributing
-
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## Acknowledgments
-
-Built with:
-- [Tokio](https://tokio.rs/) - Async runtime
-- [Reqwest](https://github.com/seanmonstar/reqwest) - HTTP client
-- [Scraper](https://github.com/causal-agent/scraper) - HTML parsing
-- [Clap](https://github.com/clap-rs/clap) - CLI framework

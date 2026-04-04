@@ -5,6 +5,16 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.2.0-alpha.1). Leave empty to use tag.'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -17,10 +27,12 @@ jobs:
       prerelease: ${{ steps.check_prerelease.outputs.prerelease }}
       version: ${{ steps.get_version.outputs.version }}
     steps:
-      - name: Get version from tag
+      - name: Get version from tag or input
         id: get_version
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           else
             echo "version=0.0.0-dev" >> $GITHUB_OUTPUT
@@ -29,11 +41,16 @@ jobs:
       - name: Detect prerelease
         id: check_prerelease
         run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          if echo "$VERSION" | grep -qE '-(alpha|beta|rc)'; then
-            echo "prerelease=true" >> $GITHUB_OUTPUT
+          # Honour explicit workflow_dispatch input first
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "prerelease=${{ github.event.inputs.prerelease }}" >> $GITHUB_OUTPUT
           else
-            echo "prerelease=false" >> $GITHUB_OUTPUT
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            if echo "$VERSION" | grep -qE '-(alpha|beta|rc)'; then
+              echo "prerelease=true" >> $GITHUB_OUTPUT
+            else
+              echo "prerelease=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
   build:
@@ -113,6 +130,8 @@ jobs:
         if: matrix.os != 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || github.ref }}
+          name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || '' }}
           prerelease: ${{ needs.create-release.outputs.prerelease == 'true' }}
           files: |
             ${{ matrix.asset_name }}.tar.gz
@@ -122,10 +141,13 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || github.ref }}
+          name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || '' }}
           prerelease: ${{ needs.create-release.outputs.prerelease == 'true' }}
           files: |
             ${{ matrix.asset_name }}.zip
             ${{ matrix.asset_name }}.zip.sha256
+
 
   docker:
     name: Build and Push Docker Image

@@ -146,16 +146,26 @@ jobs:
           path: target
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Cache cross binary
+        if: matrix.use_cross
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cross
+          key: cross-binary-${{ runner.os }}
+
       - name: Install cross
         if: matrix.use_cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        run: |
+          if ! command -v cross &> /dev/null; then
+            cargo install cross --git https://github.com/cross-rs/cross
+          fi
 
       - name: Build release binary (cross)
         if: matrix.use_cross
         run: cross build --release --target ${{ matrix.target }}
 
       - name: Build release binary (cargo)
-        if: '!matrix.use_cross'
+        if: matrix.use_cross == false
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Create archive (Unix)

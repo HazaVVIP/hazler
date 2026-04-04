@@ -20,11 +20,11 @@ once_cell = { workspace = true }
 rand = "0.8"
 chrono = "0.4"
 rusqlite = { version = "0.32", features = ["bundled"] }
-hazler-http = { path = "../hazler-http" }
-hazler-parser = { path = "../hazler-parser" }
-hazler-js-parser = { path = "../hazler-js-parser" }
-hazler-secrets = { path = "../hazler-secrets" }
-hazler-browser = { path = "../hazler-browser", optional = true }
+hazler-http = { path = "../hazler-http", version = "0.2.0" }
+hazler-parser = { path = "../hazler-parser", version = "0.2.0" }
+hazler-js-parser = { path = "../hazler-js-parser", version = "0.2.0" }
+hazler-secrets = { path = "../hazler-secrets", version = "0.2.0" }
+hazler-browser = { path = "../hazler-browser", version = "0.2.0", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

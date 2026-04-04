@@ -48,12 +48,7 @@ echo ""
 echo "  Updating Cargo.toml..."
 sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" "$REPO_ROOT/Cargo.toml"
 
-# ── 2. Dockerfile ─────────────────────────────────────────────────────────────
-
-echo "  Updating Dockerfile..."
-sed -i "s/org\.opencontainers\.image\.version=\"[^\"]*\"/org.opencontainers.image.version=\"$NEW_VERSION\"/" "$REPO_ROOT/Dockerfile"
-
-# ── 3. install.sh ─────────────────────────────────────────────────────────────
+# ── 2. install.sh ─────────────────────────────────────────────────────────────
 
 echo "  Updating install.sh..."
 sed -i "s/^# Version: .*/# Version: $NEW_VERSION/" "$REPO_ROOT/install.sh"
@@ -96,7 +91,6 @@ fi
 echo ""
 echo "Done. Files updated:"
 echo "  - Cargo.toml"
-echo "  - Dockerfile"
 echo "  - install.sh"
 echo "  - CHANGELOG.md"
 echo ""

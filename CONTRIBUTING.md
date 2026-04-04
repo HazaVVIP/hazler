@@ -13,6 +13,7 @@ Thank you for your interest in contributing to Hazler! This document provides gu
 - [Code Style](#code-style)
 - [Commit Messages](#commit-messages)
 - [Pull Request Process](#pull-request-process)
+- [Releasing](#releasing)
 - [Reporting Bugs](#reporting-bugs)
 - [Suggesting Features](#suggesting-features)
 
@@ -412,6 +413,56 @@ Include:
    git checkout main
    git pull upstream main
    ```
+
+## Releasing
+
+This section is for maintainers who are preparing a new release.
+
+### Prerequisites
+
+- Write access to the repository
+- A `CARGO_REGISTRY_TOKEN` secret configured in the repository settings (for crates.io publishing)
+
+### Steps
+
+1. **Bump the version** using the provided script. This updates `Cargo.toml`, `Dockerfile`,
+   `install.sh`, and `CHANGELOG.md` in one shot:
+
+   ```bash
+   ./scripts/bump-version.sh <new-version>
+   # e.g. ./scripts/bump-version.sh 0.3.0
+   # e.g. ./scripts/bump-version.sh 0.3.0-alpha.1
+   ```
+
+2. **Fill in the changelog** — edit the new section in `CHANGELOG.md` with release notes.
+
+3. **Commit and tag**:
+
+   ```bash
+   git commit -am "chore: bump version to <new-version>"
+   git tag v<new-version>
+   git push origin main --tags
+   ```
+
+4. **The release workflow runs automatically** on tag push and will:
+   - Run the full CI gate (tests, clippy, fmt, security audit)
+   - Build binaries for all platforms (Linux x86_64/aarch64, macOS x86_64/aarch64, Windows x86_64)
+   - Create a GitHub Release with SHA256-verified archives
+   - Build and push a multi-arch Docker image to GHCR
+   - Publish all crates to crates.io (stable releases only)
+
+### Manual release (workflow_dispatch)
+
+You can also trigger a release manually from the **Actions** tab using the
+`workflow_dispatch` event. Provide the version string (without the `v` prefix).
+**The tag must already exist in the repository** — the workflow will fail if the
+tag is missing to prevent accidental orphan tags.
+
+### Pre-release versions
+
+Any version containing `-alpha`, `-beta`, or `-rc` (e.g. `0.3.0-alpha.1`) is
+automatically treated as a pre-release: the GitHub Release is marked as such and
+the `latest` Docker tag is **not** updated.
 
 ## Reporting Bugs
 

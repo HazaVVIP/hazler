@@ -18,21 +18,74 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  check:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        run: cargo test --workspace
+
+      - name: Run clippy
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run security audit
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   create-release:
     name: Create Release
+    needs: check
     runs-on: ubuntu-latest
     outputs:
       prerelease: ${{ steps.check_prerelease.outputs.prerelease }}
+      is_stable: ${{ steps.check_prerelease.outputs.is_stable }}
       version: ${{ steps.get_version.outputs.version }}
       tag_name: ${{ steps.get_tag.outputs.tag_name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+
+      - name: Validate tag exists (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
+        run: |
+          git fetch --tags
+          TAG="v${{ github.event.inputs.version }}"
+          git tag --list "$TAG" | grep -q "$TAG" || {
+            echo "::error::Tag $TAG does not exist. Create and push the tag before triggering a manual release."
+            exit 1
+          }
 
       - name: Get version from tag or input
         id: get_version
@@ -59,14 +112,20 @@ jobs:
         run: |
           # Honour explicit workflow_dispatch input first
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "prerelease=${{ github.event.inputs.prerelease }}" >> $GITHUB_OUTPUT
+            PRERELEASE="${{ github.event.inputs.prerelease }}"
           else
             VERSION="${GITHUB_REF#refs/tags/v}"
             if echo "$VERSION" | grep -qE '-(alpha|beta|rc)'; then
-              echo "prerelease=true" >> $GITHUB_OUTPUT
+              PRERELEASE="true"
             else
-              echo "prerelease=false" >> $GITHUB_OUTPUT
+              PRERELEASE="false"
             fi
+          fi
+          echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+          if [[ "$PRERELEASE" == "true" ]]; then
+            echo "is_stable=false" >> $GITHUB_OUTPUT
+          else
+            echo "is_stable=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Create GitHub Release
@@ -79,7 +138,7 @@ jobs:
 
   build:
     name: Build for ${{ matrix.target }}
-    needs: create-release
+    needs: [check, create-release]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -151,13 +210,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/cross
-          key: cross-binary-${{ runner.os }}
+          key: cross-binary-${{ runner.os }}-0.2.5
 
       - name: Install cross
         if: matrix.use_cross
         run: |
           if ! command -v cross &> /dev/null; then
-            cargo install cross --git https://github.com/cross-rs/cross
+            cargo install cross --version 0.2.5 --locked
           fi
 
       - name: Build release binary (cross)
@@ -178,11 +237,13 @@ jobs:
 
       - name: Create archive (Windows)
         if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
-          cd target/${{ matrix.target }}/release
-          7z a ../../../${{ matrix.asset_name }}.zip ${{ matrix.binary_name }}
-          cd ../../../
-          certutil -hashfile ${{ matrix.asset_name }}.zip SHA256 > ${{ matrix.asset_name }}.zip.sha256
+          Set-Location "target/${{ matrix.target }}/release"
+          7z a "../../../${{ matrix.asset_name }}.zip" "${{ matrix.binary_name }}"
+          Set-Location "../../.."
+          $hash = (Get-FileHash "${{ matrix.asset_name }}.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  ${{ matrix.asset_name }}.zip" | Out-File "${{ matrix.asset_name }}.zip.sha256" -Encoding ascii
 
       - name: Upload release assets (Unix)
         if: matrix.os != 'windows-latest'
@@ -204,10 +265,9 @@ jobs:
             ${{ matrix.asset_name }}.zip
             ${{ matrix.asset_name }}.zip.sha256
 
-
   docker:
     name: Build and Push Docker Image
-    needs: [create-release, build]
+    needs: [check, create-release, build]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -232,7 +292,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ needs.create-release.outputs.prerelease != 'true' }}
+            type=raw,value=latest,enable=${{ needs.create-release.outputs.is_stable == 'true' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -241,7 +301,72 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_VERSION=${{ needs.create-release.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
+
+  publish:
+    name: Publish to crates.io
+    needs: [check, create-release, build]
+    runs-on: ubuntu-latest
+    if: needs.create-release.outputs.is_stable == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Publish hazler-http
+        run: cargo publish -p hazler-http --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index hazler-http
+        run: sleep 30
+
+      - name: Publish hazler-parser
+        run: cargo publish -p hazler-parser --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index hazler-parser
+        run: sleep 30
+
+      - name: Publish hazler-js-parser
+        run: cargo publish -p hazler-js-parser --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index hazler-js-parser
+        run: sleep 30
+
+      - name: Publish hazler-secrets
+        run: cargo publish -p hazler-secrets --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index hazler-secrets
+        run: sleep 30
+
+      - name: Publish hazler-core
+        run: cargo publish -p hazler-core --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index hazler-core
+        run: sleep 30
+
+      - name: Publish hazler-browser
+        run: cargo publish -p hazler-browser --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index hazler-browser
+        run: sleep 30
+
+      - name: Publish hazler-fuzzer
+        run: cargo publish -p hazler-fuzzer --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index hazler-fuzzer
+        run: sleep 30
+
+      - name: Publish hazler-cli
+        run: cargo publish -p hazler-cli --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
 

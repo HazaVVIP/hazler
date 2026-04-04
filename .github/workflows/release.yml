@@ -66,6 +66,7 @@ jobs:
   create-release:
     name: Create Release
     needs: check
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '')
     runs-on: ubuntu-latest
     outputs:
       prerelease: ${{ steps.check_prerelease.outputs.prerelease }}

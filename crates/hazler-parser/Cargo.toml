@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+description = "HTML parser for extracting links and endpoints for the Hazler web crawler"
 
 [dependencies]
 scraper = { workspace = true }

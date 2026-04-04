@@ -270,9 +270,7 @@ impl OutputFormatter {
             if !page.secrets.is_empty() {
                 output.push_str(&format!(
                     "  {}",
-                    format!("🔒 {} secrets", page.secrets.len())
-                        .bright_red()
-                        .to_string()
+                    format!("🔒 {} secrets", page.secrets.len()).bright_red()
                 ));
             }
 

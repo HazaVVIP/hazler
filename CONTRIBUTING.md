@@ -79,11 +79,19 @@ hazler/
 ├── crates/
 │   ├── hazler-core/       # Core crawling logic
 │   │   ├── src/
-│   │   │   ├── config.rs  # Configuration
-│   │   │   ├── crawler.rs # Main crawler
-│   │   │   ├── queue.rs   # URL queue
-│   │   │   ├── scope.rs   # Scope validation
-│   │   │   └── types.rs   # Data types
+│   │   │   ├── config.rs        # Configuration
+│   │   │   ├── crawler.rs       # Main crawler
+│   │   │   ├── queue.rs         # URL queue
+│   │   │   ├── scope.rs         # Scope validation
+│   │   │   ├── types.rs         # Data types
+│   │   │   ├── noise_filter.rs  # WAF/404 noise suppression
+│   │   │   ├── normalizer.rs    # URL normalisation
+│   │   │   ├── persistence.rs   # JSON/SQLite state storage
+│   │   │   ├── retry.rs         # Retry with exponential backoff
+│   │   │   ├── circuit_breaker.rs # Per-domain circuit breaker
+│   │   │   ├── rate_limiter.rs  # Token-bucket rate limiter
+│   │   │   ├── differ/          # SimHash, clustering, baseline
+│   │   │   └── ...
 │   │   └── tests/         # Integration tests
 │   ├── hazler-http/       # HTTP client wrapper
 │   │   ├── src/
@@ -95,10 +103,20 @@ hazler/
 │   │   │   ├── parser.rs  # HTML parser
 │   │   │   └── error.rs   # Error types
 │   │   └── tests/
+│   ├── hazler-js-parser/  # JavaScript endpoint extraction
+│   ├── hazler-secrets/    # Secret & credential detection
+│   ├── hazler-browser/    # Headless browser integration (CDP/chromiumoxide)
+│   ├── hazler-fuzzer/     # URL mutation and parameter fuzzing
 │   └── hazler-cli/        # CLI interface
 │       └── src/
 │           └── main.rs    # CLI entry point
+├── docs/
+│   ├── CLI.md             # Full CLI flag reference
+│   └── ARCHITECTURE.md    # Crate dependency graph and data-flow
 ├── Cargo.toml             # Workspace manifest
+├── CHANGELOG.md           # Version history
+├── ROADMAP.md             # Feature roadmap
+├── SECURITY.md            # Security policy
 ├── README.md
 └── CONTRIBUTING.md        # This file
 ```

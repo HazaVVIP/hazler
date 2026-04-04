@@ -1,6 +1,27 @@
 # Hazler - Next-Generation Intelligent Web Crawler
 
+[![CI](https://github.com/HazaVVIP/hazler/actions/workflows/ci.yml/badge.svg)](https://github.com/HazaVVIP/hazler/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/HazaVVIP/hazler)](https://github.com/HazaVVIP/hazler/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A fast, efficient, and human-friendly web crawler built in Rust with built-in security features.
+
+## 🆕 What's New in v0.2.0
+
+| Feature | Flag |
+|---------|------|
+| **Headless browser** — crawl SPAs (React, Vue, Angular) via CDP | `--browser` |
+| **Smart fuzzing** — URL mutations, parameter discovery, BOLA/IDOR detection | `--fuzz` |
+| **Response diffing** — SimHash, K-means/DBSCAN clustering, baseline comparison | `--baseline` / `--compare` |
+| **Authentication framework** — Basic, Bearer, Cookie, Header, OAuth2, API Key, form login | `--auth` / `--auth-file` |
+| **GraphQL introspection** — Schema extraction from detected endpoints | `--graphql-introspect` |
+| **Source map parsing** — Reveal original source paths (admin panels, API routes) | enabled by default |
+| **HTML/PDF/SQLite export** — Professional reports and queryable database | `--export TYPE:FILE` |
+| **Webhook notifications** — Post results to Slack, Discord, or a generic endpoint | `--webhook URL` |
+| **State persistence & resume** — Save and resume interrupted crawls | `--auto-save` / `--resume` |
+| **Circuit breaker & rate limiting** — Resilient crawling with adaptive backoff | `--circuit-breaker` |
+
+See [CHANGELOG.md](CHANGELOG.md) for the full list of changes.
 
 ## ✨ Key Features
 
@@ -934,8 +955,12 @@ If you encounter issues not covered here:
 hazler/
 ├── Cargo.toml                  # Root workspace manifest
 ├── README.md                   # This file
+├── CHANGELOG.md                # Version history
 ├── CONTRIBUTING.md             # Contribution guidelines
+├── ROADMAP.md                  # Feature roadmap
+├── SECURITY.md                 # Security policy & responsible disclosure
 ├── LICENSE                     # MIT License
+├── rust-toolchain.toml         # Pinned Rust toolchain
 ├── install.sh                  # Automated installation script
 ├── Dockerfile                  # Docker image configuration
 ├── crates/
@@ -944,7 +969,14 @@ hazler/
 │   ├── hazler-parser/         # HTML parsing
 │   ├── hazler-js-parser/      # JavaScript endpoint extraction
 │   ├── hazler-secrets/        # Secret & credential detection
+│   ├── hazler-browser/        # Headless browser integration (CDP/chromiumoxide)
+│   ├── hazler-fuzzer/         # URL mutation and parameter fuzzing
 │   └── hazler-cli/            # Command-line interface
+├── docs/
+│   ├── CLI.md                  # Full CLI reference
+│   └── ARCHITECTURE.md        # Crate dependency graph and data-flow overview
+└── scripts/
+    └── bpftrace/               # eBPF monitoring scripts
 ```
 
 ## Development
@@ -952,7 +984,17 @@ hazler/
 ### Running tests
 
 ```bash
-cargo test
+cargo test --workspace
+```
+
+### Formatting and linting
+
+```bash
+# Check formatting (also enforced in CI)
+cargo fmt --check
+
+# Run clippy lints
+cargo clippy -- -D warnings
 ```
 
 ### Running with debug logs
@@ -992,6 +1034,8 @@ See [scripts/bpftrace/README.md](scripts/bpftrace/README.md) for detailed docume
 
 ## Roadmap
 
+See [ROADMAP.md](ROADMAP.md) for the full roadmap. Summary:
+
 ### Phase 1: MVP ✅
 - Basic HTTP crawler ✅
 - HTML parsing ✅
@@ -1011,23 +1055,28 @@ See [scripts/bpftrace/README.md](scripts/bpftrace/README.md) for detailed docume
 - **Comprehensive reporting** ✅
 - **HTML report generation** ✅
 
-### Phase 3: Enhanced Stealth & Scale (In Progress)
-- Full WAF evasion implementation
-- Proxy support implementation
-- Advanced rate limiting
-- Priority queue with scoring
-- Content similarity detection (SimHash)
+### Phase 3: Enhanced Stealth & Scale ✅
+- **Full WAF evasion** ✅ (user-agent rotation, Chrome client hints, adaptive timing)
+- **Advanced rate limiting** ✅ (per-domain token bucket with 429 detection)
+- **Content similarity detection** ✅ (SimHash, K-means/DBSCAN clustering)
 - **Headless browser support** ✅
+- **Smart fuzzing** ✅ (URL mutations, parameter discovery, BOLA/IDOR detection)
+- **Response diffing & baseline comparison** ✅
+- **Retry & circuit breaker** ✅
+- **State persistence & resume** ✅
+- **Authentication framework** ✅
+- **Reporting & export system** ✅ (HTML, PDF, SQLite, OpenAPI, Postman, Nuclei, ffuf, Burp)
+- **Webhook notifications** ✅
+- **GraphQL introspection** ✅
+- **Source map parsing** ✅
 - **eBPF/bpftrace debugging** ✅
-- Distributed crawling (Redis)
-- OpenTelemetry integration
-- Dashboard
 
 ### Phase 4: Polish (Planned)
 - robots.txt respect
-- Binary releases for all platforms
-- Advanced authentication support
-- Resume capability for interrupted crawls
+- Proxy support (SOCKS5, HTTP)
+- Distributed crawling (Redis)
+- OpenTelemetry integration
+- Real-time dashboard
 - Plugin system for extensibility
 
 ## FAQ
@@ -1095,14 +1144,35 @@ hazler https://example.com -o json | jq '.pages[] | select(.url | contains("/blo
 
 ### Does Hazler store crawl data?
 
-No, Hazler outputs all data to stdout. You can redirect output to a file:
+By default, Hazler outputs all data to stdout. You can redirect output to a file:
 ```bash
 hazler https://example.com > crawl-results.jsonl
 ```
 
+For persistent storage and later querying, use the SQLite export:
+```bash
+hazler https://example.com --export sqlite:crawl.db
+```
+
+You can also enable automatic state saving for resume support:
+```bash
+hazler https://example.com --auto-save 30
+```
+
 ### Can I resume an interrupted crawl?
 
-Not yet. Crawl state persistence is planned for Phase 4.
+Yes! Use `--auto-save` to periodically save crawl state, and `--resume` to continue from where you left off:
+
+```bash
+# Start a crawl with auto-save every 30 seconds
+hazler https://example.com --auto-save 30
+
+# Resume from a saved state file
+hazler https://example.com --resume hazler-state.json
+
+# Use SQLite backend for the state
+hazler https://example.com --auto-save 30 --persist-sqlite --resume hazler-state.db
+```
 
 ### How do I crawl multiple domains?
 

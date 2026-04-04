@@ -315,10 +315,7 @@ impl Crawler {
                                     let _ = tx.send(ValidEndpoint {
                                         url: page.url.clone(),
                                         status_code: page.status_code,
-                                        content_type: page
-                                            .content_type
-                                            .clone()
-                                            .unwrap_or_default(),
+                                        content_type: page.content_type.clone().unwrap_or_default(),
                                     });
                                 }
                             }
@@ -522,7 +519,6 @@ impl Crawler {
     fn is_soft_forbidden_body(body: &str) -> bool {
         Self::is_soft_error_body(body)
     }
-
 
     /// Determine if we should use browser for this URL
     /// Browser is useful for HTML pages but not for API endpoints or static files

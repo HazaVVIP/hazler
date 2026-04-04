@@ -149,15 +149,14 @@ impl JavaScriptParser {
         let mut endpoint_confidence: std::collections::HashMap<String, (Url, f32)> =
             std::collections::HashMap::new();
 
-        let insert = |map: &mut std::collections::HashMap<String, (Url, f32)>,
-                      url: Url,
-                      confidence: f32| {
-            let key = url.as_str().to_string();
-            let entry = map.entry(key).or_insert((url.clone(), confidence));
-            if confidence > entry.1 {
-                *entry = (url, confidence);
-            }
-        };
+        let insert =
+            |map: &mut std::collections::HashMap<String, (Url, f32)>, url: Url, confidence: f32| {
+                let key = url.as_str().to_string();
+                let entry = map.entry(key).or_insert((url.clone(), confidence));
+                if confidence > entry.1 {
+                    *entry = (url, confidence);
+                }
+            };
 
         // Standard pattern matching
         for (pattern, &confidence) in self.patterns.iter().zip(JS_URL_PATTERN_CONFIDENCE.iter()) {

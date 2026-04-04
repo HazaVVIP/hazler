@@ -950,7 +950,10 @@ async fn main() {
     // Display authentication info if configured
     if let Some(ref auth) = auth_config {
         if args.verbose {
-            eprintln!("Authentication enabled: {}", auth.method.sanitized_display());
+            eprintln!(
+                "Authentication enabled: {}",
+                auth.method.sanitized_display()
+            );
         }
     }
 
@@ -1024,8 +1027,7 @@ async fn main() {
     // Create a channel so the crawler can send verified endpoints in real-time.
     // The display task reads from the receiver and prints to stdout while the
     // crawl runs concurrently.
-    let (endpoint_tx, mut endpoint_rx) =
-        tokio::sync::mpsc::unbounded_channel::<ValidEndpoint>();
+    let (endpoint_tx, mut endpoint_rx) = tokio::sync::mpsc::unbounded_channel::<ValidEndpoint>();
 
     // Shared counter for the progress indicator
     let valid_count = Arc::new(AtomicUsize::new(0));

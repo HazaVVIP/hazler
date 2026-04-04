@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+description = "HTTP client utilities for the hazler web crawling framework"
 
 [dependencies]
 tokio = { workspace = true }

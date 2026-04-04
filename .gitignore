@@ -17,3 +17,9 @@
 
 # Debug
 *.log
+
+# Generated reports (do not commit crawl output)
+*.html
+*.pdf
+hazler-state.json
+hazler-state.db

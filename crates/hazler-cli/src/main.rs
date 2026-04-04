@@ -33,7 +33,7 @@ use fuzzer_integration::{apply_fuzzing, write_fuzz_output};
 #[derive(Parser, Debug)]
 #[command(name = "hazler")]
 #[command(author = "Hazler Team")]
-#[command(version = "0.1.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Next-Generation Intelligent Web Crawler", long_about = None)]
 struct Args {
     /// Target URL to crawl (use '-' to read URLs from stdin for pipeline mode)
@@ -53,7 +53,7 @@ struct Args {
     max_pages: usize,
 
     /// Custom user agent string
-    #[arg(short = 'u', long, default_value = "Hazler/0.1.0")]
+    #[arg(short = 'u', long, default_value_t = format!("Hazler/{}", env!("CARGO_PKG_VERSION")))]
     user_agent: String,
 
     /// Request timeout in seconds
@@ -737,7 +737,7 @@ fn run_wizard() -> Args {
         max_depth,
         concurrency: 10,
         max_pages,
-        user_agent: "Hazler/0.1.0".to_string(),
+        user_agent: format!("Hazler/{}", env!("CARGO_PKG_VERSION")),
         timeout: 10,
         output_format,
         include_body: false,
